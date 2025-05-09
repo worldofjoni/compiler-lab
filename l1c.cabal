@@ -33,7 +33,7 @@ executable l1c
                   Compile.Parser,
                   Compile.Semantic,
                   Compile.CodeGen,
-                  Compile.Asmgen,
+                  Compile.AsmGen,
                   Compile.IR,
                   Error
     hs-source-dirs:   app

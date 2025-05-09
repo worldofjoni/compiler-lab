@@ -2,11 +2,11 @@ module Compile.CodeGen
   ( codeGen
   ) where
 
-import           Compile.AST (AST(..), Expr(..), Stmt(..), showAsgnOp, Op)
+import           Compile.AST (AST(..), Expr(..), Stmt(..))
 
 import           Control.Monad.State
 import qualified Data.Map as Map
-import Compile.IR (VRegister)
+import Compile.IR
 
 
 type VarName = String
@@ -15,25 +15,19 @@ type AAsmAlloc = Map.Map VarName VRegister
 
 type CodeGen a = State CodeGenState a
 
-type IR = [IStmt]
-data IStmt = Return VRegister | VRegister :<- VRegister | VRegister :<-+ (VRegister,  Op, VRegister)
-
-
-
-
 data CodeGenState = CodeGenState
   { regMap :: AAsmAlloc
   , nextReg :: VRegister
-  , code :: [String]
+  , code :: IR
   }
 
-codeGen :: AST -> [String]
+codeGen :: AST -> IR
 codeGen (Block stmts _) = code $ execState (genBlock stmts) initialState
   where
     initialState = CodeGenState Map.empty 0 []
 
-regName :: VRegister -> String
-regName n = "%" ++ show n
+-- regName :: VRegister -> String
+-- regName n = "%" ++ show n
 
 freshReg :: CodeGen VRegister
 freshReg = do
@@ -53,7 +47,7 @@ lookupVar name = do
     Just r -> return r
     Nothing -> error "unreachable, fix your semantic analysis I guess"
 
-emit :: String -> CodeGen ()
+emit :: IStmt -> CodeGen ()
 emit instr = modify $ \s -> s {code = code s ++ [instr]}
 
 genBlock :: [Stmt] -> CodeGen ()
@@ -64,30 +58,37 @@ genStmt (Decl name _) = do
   r <- freshReg
   assignVar name r
 genStmt (Init name e _) = do
-  r <- genExpr e
+  rhs <- genExpr e
+  r <- freshReg -- TODO: Maybe we don't need a fresh registers
   assignVar name r
-genStmt (Asgn name op e _) = do
+  emit $ r :<- rhs
+genStmt (Asgn name Nothing e _) = do -- normal assingment
   rhs <- genExpr e
   lhs <- lookupVar name
-  emit $ regName lhs ++ showAsgnOp op ++ regName rhs
+  emit $ lhs :<- rhs
+genStmt (Asgn name (Just op) e _) = do
+  rhs <- genExpr e
+  lhs <- lookupVar name
+  emit $ lhs :<-+ (Reg lhs, op, rhs)
 genStmt (Ret e _) = do
   r <- genExpr e
-  emit $ "ret " ++ regName r
+  emit $ Return r
 
-genExpr :: Expr -> CodeGen VRegister
+genExpr :: Expr -> CodeGen Operand
 genExpr (IntExpr n _) = do
-  r <- freshReg
-  emit $ regName r ++ " = " ++ show n
-  return r
-genExpr (Ident name _) = lookupVar name
+  -- r <- freshReg
+  return (Imm n)
+genExpr (Ident name _) = do
+  r <- lookupVar name
+  return (Reg r)
 genExpr (UnExpr op e) = do
   r1 <- genExpr e
   r <- freshReg
-  emit $ regName r ++ " = " ++ show op ++ " " ++ regName r1
-  return r
+  emit $ Unary r op r1
+  return (Reg r)
 genExpr (BinExpr op e1 e2) = do
   r1 <- genExpr e1
   r2 <- genExpr e2
   r <- freshReg
-  emit $ regName r ++ " = " ++ regName r1 ++ " " ++ show op ++ " " ++ regName r2
-  return r
+  emit $ r :<-+ (r1, op, r2)
+  return (Reg r)

@@ -2,7 +2,7 @@ module Compile.Parser
   ( parseAST
   ) where
 
-import           Compile.AST (AST(..), Expr(..), Op(..), Stmt(..))
+import           Compile.AST (AST(..), Expr(..), Op(..), Stmt(..), UnOp (..))
 import           Error (L1ExceptT, parserFail)
 
 import           Control.Monad.Combinators.Expr
