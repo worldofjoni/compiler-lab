@@ -1,23 +1,29 @@
-module Compile.AAsm
+module Compile.CodeGen
   ( codeGen
   ) where
 
-import           Compile.AST (AST(..), Expr(..), Stmt(..), showAsgnOp)
+import           Compile.AST (AST(..), Expr(..), Stmt(..), showAsgnOp, Op)
 
 import           Control.Monad.State
 import qualified Data.Map as Map
+import Compile.IR (VRegister)
 
-type Register = Integer
 
 type VarName = String
 
-type AAsmAlloc = Map.Map VarName Register
+type AAsmAlloc = Map.Map VarName VRegister
 
 type CodeGen a = State CodeGenState a
 
+type IR = [IStmt]
+data IStmt = Return VRegister | VRegister :<- VRegister | VRegister :<-+ (VRegister,  Op, VRegister)
+
+
+
+
 data CodeGenState = CodeGenState
   { regMap :: AAsmAlloc
-  , nextReg :: Register
+  , nextReg :: VRegister
   , code :: [String]
   }
 
@@ -26,21 +32,21 @@ codeGen (Block stmts _) = code $ execState (genBlock stmts) initialState
   where
     initialState = CodeGenState Map.empty 0 []
 
-regName :: Register -> String
+regName :: VRegister -> String
 regName n = "%" ++ show n
 
-freshReg :: CodeGen Register
+freshReg :: CodeGen VRegister
 freshReg = do
   curr <- get
   let r = nextReg curr
   put curr {nextReg = r + 1}
   return r
 
-assignVar :: VarName -> Register -> CodeGen ()
+assignVar :: VarName -> VRegister -> CodeGen ()
 assignVar name r = do
   modify $ \s -> s {regMap = Map.insert name r (regMap s)}
 
-lookupVar :: VarName -> CodeGen Register
+lookupVar :: VarName -> CodeGen VRegister
 lookupVar name = do
   m <- gets regMap
   case Map.lookup name m of
@@ -68,7 +74,7 @@ genStmt (Ret e _) = do
   r <- genExpr e
   emit $ "ret " ++ regName r
 
-genExpr :: Expr -> CodeGen Register
+genExpr :: Expr -> CodeGen VRegister
 genExpr (IntExpr n _) = do
   r <- freshReg
   emit $ regName r ++ " = " ++ show n

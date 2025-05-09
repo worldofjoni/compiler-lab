@@ -35,7 +35,6 @@ data Op
   | Div
   | Neg
   | Mod
-  | Nop
 
 -- re-exported for convenience
 posPretty :: SourcePos -> String
@@ -70,7 +69,6 @@ instance Show Op where
   show Div = "/"
   show Neg = "-"
   show Mod = "%"
-  show Nop = "[nop]"
 
 showAsgnOp :: AsgnOp -> String
 showAsgnOp (Just op) = " " ++ show op ++ "= "

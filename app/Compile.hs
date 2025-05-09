@@ -3,7 +3,7 @@ module Compile
   , compile
   ) where
 
-import Compile.AAsm (codeGen)
+import Compile.CodeGen (codeGen)
 import Compile.Parser (parseAST)
 import Compile.Semantic (semanticAnalysis)
 import Error (L1ExceptT)
