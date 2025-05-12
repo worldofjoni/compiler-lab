@@ -24,7 +24,10 @@ compile job = do
   semanticAnalysis ast
   let ir = codeGen ast
   let asm = genAsm 0 ir
-  liftIO $ putStrLn asm
+  liftIO . putStrLn . enumLines $ asm
   _ <- liftIO $ readProcess "gcc" ["-x", "assembler", "-", "-o", out job] asm
-  -- liftIO $ writeFile (out job) asm
   return ()
+
+
+enumLines :: String -> String
+enumLines s = unlines $ zipWith (\n l -> show n ++ ": " ++ l) [1 :: Int ..] (lines s)
