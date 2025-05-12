@@ -1,22 +1,21 @@
 module Compile.Parser
   ( parseAST,
-    parseNumber
-  ) where
+    parseNumber,
+  )
+where
 
-import           Compile.AST (AST(..), Expr(..), Op(..), Stmt(..), UnOp (..))
-import           Error (L1ExceptT, parserFail)
-
-import           Control.Monad.Combinators.Expr
-import           Control.Monad.IO.Class (liftIO)
-import           Data.Functor (void)
-import           Data.Void (Void)
-import           Data.Int (Int32)
-import           Numeric (showHex)
-
-import           Text.Megaparsec
-import           Text.Megaparsec.Char
+import Compile.AST (AST (..), Expr (..), Op (..), Stmt (..), UnOp (..))
+import Control.Monad.Combinators.Expr
+import Control.Monad.IO.Class (liftIO)
+import Data.Char (isAlpha, isAscii, isDigit)
+import Data.Functor (void)
+import Data.Int (Int32)
+import Data.Void (Void)
+import Error (L1ExceptT, parserFail)
+import Numeric (showHex)
+import Text.Megaparsec
+import Text.Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer as L
-import Data.Char (isAscii)
 
 parseAST :: FilePath -> L1ExceptT AST
 parseAST path = do
@@ -81,17 +80,18 @@ simp = do
   return $ Asgn name op e pos
 
 asnOp :: Parser (Maybe Op)
-asnOp = do
-  op <- operator
-  case op of
-    "+=" -> pure (Just Add)
-    "*=" -> pure (Just Mul)
-    "-=" -> pure (Just Sub)
-    "/=" -> pure (Just Div)
-    "%=" -> pure (Just Mod)
-    "=" -> pure Nothing
-    x -> fail $ "Nonexistent assignment operator: " ++ x
-  <?> "assignment operator"
+asnOp =
+  do
+    op <- operator
+    case op of
+      "+=" -> pure (Just Add)
+      "*=" -> pure (Just Mul)
+      "-=" -> pure (Just Sub)
+      "/=" -> pure (Just Div)
+      "%=" -> pure (Just Mod)
+      "=" -> pure Nothing
+      x -> fail $ "Nonexistent assignment operator: " ++ x
+    <?> "assignment operator"
 
 ret :: Parser Stmt
 ret = do
@@ -117,12 +117,12 @@ identExpr = do
 
 opTable :: [[Operator Parser Expr]]
 opTable =
-  [ [Prefix (manyUnaryOp)]
-  , [ InfixL (BinExpr Mul <$ symbol "*")
-    , InfixL (BinExpr Div <$ symbol "/")
-    , InfixL (BinExpr Mod <$ symbol "%")
-    ]
-  , [InfixL (BinExpr Add <$ symbol "+"), InfixL (BinExpr Sub <$ symbol "-")]
+  [ [Prefix manyUnaryOp],
+    [ InfixL (BinExpr Mul <$ symbol "*"),
+      InfixL (BinExpr Div <$ symbol "/"),
+      InfixL (BinExpr Mod <$ symbol "%")
+    ],
+    [InfixL (BinExpr Add <$ symbol "+"), InfixL (BinExpr Sub <$ symbol "-")]
   ]
   where
     -- this allows us to parse `---x` as `-(-(-x))`
@@ -134,7 +134,7 @@ expr = makeExprParser expr' opTable <?> "expression"
 
 -- Lexer starts here, probably worth moving to its own file at some point
 sc :: Parser ()
-sc = L.space space1 lineComment blockComment
+sc = L.space (void $ takeWhile1P Nothing (`elem` [' ', '\t', '\r', '\n'])) lineComment blockComment
   where
     lineComment = L.skipLineComment "//"
     blockComment = L.skipBlockCommentNested "/*" "*/"
@@ -159,7 +159,7 @@ numberLiteral = lexeme (try hexLiteral <|> decLiteral <?> "number")
 
 -- We want to reject leading zeroes, but `0` itself should of course be accepted
 decLiteral :: Parser String
-decLiteral = string "0" <|> (:) <$> oneOf ['1'..'9'] <*> many digitChar
+decLiteral = string "0" <|> (:) <$> oneOf ['1' .. '9'] <*> many digitChar
 
 hexLiteral :: Parser String
 hexLiteral = do
@@ -176,10 +176,12 @@ decimal = do
   notFollowedBy alphaNumChar
   if n < maxInt
     then return n
-    else if n == maxInt
-           then return (-maxInt)
-           else fail $ "Decimal literal out of bounds: " ++ show n
-  where maxInt = 2^(31 :: Integer)
+    else
+      if n == maxInt
+        then return (-maxInt)
+        else fail $ "Decimal literal out of bounds: " ++ show n
+  where
+    maxInt = 2 ^ (31 :: Integer)
 
 hexadecimal :: Parser Integer
 hexadecimal = do
@@ -188,34 +190,35 @@ hexadecimal = do
   if n > maxHex
     then fail $ "Hexadecimal literal out of bounds: " ++ "0x" ++ showHex n ""
     else return $ toInteger ((fromInteger n) :: Int32)
-  where maxHex = 0xFFFFFFFF
+  where
+    maxHex = 0xFFFFFFFF
 
 reserved :: String -> Parser ()
 reserved w = void $ lexeme $ (string w <* notFollowedBy identLetter)
 
 reservedWords :: [String]
 reservedWords =
-  [ "alloc"
-  , "alloc_array"
-  , "assert"
-  , "bool"
-  , "break"
-  , "char"
-  , "continue"
-  , "else"
-  , "false"
-  , "for"
-  , "if"
-  , "int"
-  , "NULL"
-  , "print"
-  , "read"
-  , "return"
-  , "string"
-  , "struct"
-  , "true"
-  , "void"
-  , "while"
+  [ "alloc",
+    "alloc_array",
+    "assert",
+    "bool",
+    "break",
+    "char",
+    "continue",
+    "else",
+    "false",
+    "for",
+    "if",
+    "int",
+    "NULL",
+    "print",
+    "read",
+    "return",
+    "string",
+    "struct",
+    "true",
+    "void",
+    "while"
   ]
 
 -- Operations
@@ -230,14 +233,17 @@ operator = lexeme ((:) <$> opStart <*> many opLetter)
 
 -- Identifiers
 identStart :: Parser Char
-identStart = letterChar <|> char '_'
---  where validLetter = satisfy (\c -> isAlpha c && isAscii c)
+identStart = validLetter <|> char '_'
+  where
+    validLetter = satisfy (\c -> isAlpha c && isAscii c)
 
 identLetter :: Parser Char
-identLetter = alphaNumChar <|> char '_'
+identLetter = validAlphaNum <|> char '_'
+  where
+    validAlphaNum = satisfy (\c -> (isAlpha c || isDigit c) && isAscii c)
 
 identifier :: Parser String
-identifier = (lexeme .try) (p >>= check)
+identifier = (lexeme . try) (p >>= check)
   where
     p = (:) <$> identStart <*> many identLetter
     check x =
