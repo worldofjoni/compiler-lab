@@ -69,7 +69,7 @@ genStmt (Ret e _) = do
   emit $ Return x
 
 toOperand :: Expr -> CodeGen Operand
-toOperand (IntExpr n _) = pure $ Imm n
+toOperand (IntExpr n _) = pure . Imm . read $ n
 toOperand (Ident name _) = do
   r <- lookupVar name
   return $ Reg r
@@ -80,7 +80,7 @@ toOperand e = do
 
 assignTo :: VRegister -> Expr -> CodeGen ()
 assignTo d (IntExpr n _) = do
-  emit $ d :<- Imm n
+  emit $ d :<- Imm (read n)
 assignTo d (Ident name _) = do
   r <- lookupVar name
   emit $ d :<- Reg r
