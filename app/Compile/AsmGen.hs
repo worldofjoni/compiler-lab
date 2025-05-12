@@ -1,6 +1,6 @@
 module Compile.AsmGen (genIR, genIStmt) where
 
-import Compile.AST (Op (..))
+import Compile.AST (Op (..), UnOp (..))
 import Compile.IR (IR, IStmt (..), Operand (..), VRegister)
 
 type Asm = String
@@ -47,7 +47,11 @@ genIStmt (x :<-+ (a, Sub, b)) =
     [ mov (showOperand a) (stackAddress x),
       "sub" ++ showOperand b ++ stackAddress x
     ]
-genIStmt (_ :<-+ (_, Neg, _)) = undefined
+genIStmt (Unary reg Neg a) =
+  unlines
+    [ mov (showOperand a) (stackAddress reg),
+      "neg " ++ stackAddress reg
+    ]
 
 stackAddress :: VRegister -> String
 stackAddress reg = show reg ++ "(%rsp)"
