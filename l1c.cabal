@@ -25,7 +25,8 @@ executable l1c
                   mtl,
                   optparse-applicative >= 0.18.1.0,
                   parser-combinators,
-                  transformers
+                  transformers,
+                  process
     other-modules:
                   Args,
                   Compile,

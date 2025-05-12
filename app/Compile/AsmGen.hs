@@ -1,19 +1,20 @@
-module Compile.AsmGen (genIR, genIStmt) where
+module Compile.AsmGen (genAsm, genIStmt) where
 
 import Compile.AST (Op (..), UnOp (..))
 import Compile.IR (IR, IStmt (..), Operand (..), VRegister)
 
 type Asm = String
 
-genIR :: Int -> IR -> Asm
-genIR numRegs = unlines . (initStack numRegs :) . map genIStmt
+genAsm :: Int -> IR -> Asm
+genAsm numRegs = unlines . (preamble : {-. (initStack numRegs :)-}) . map genIStmt
 
-initStack :: Int -> Asm
-initStack numRegs = "sub" ++ decConst (numRegs * 4) ++ "%rsp" -- move stack pointer
+-- initStack :: Int -> Asm
+-- initStack numRegs = "sub" ++ decConst (numRegs * 4) ++ "%rsp" -- move stack pointer
 
 genIStmt :: IStmt -> String
-genIStmt (Return o) = unlines [mov (showOperand o) "%rax", "ret"]
-genIStmt (x :<- o) = mov (showOperand o) (stackAddress x)
+genIStmt (Return o) = unlines [mov (showOperand o) "%eax", "ret"]
+genIStmt (x :<- (Imm i)) = mov (decConst i) (stackAddress x)
+genIStmt (x :<- (Reg r)) = unlines [mov (stackAddress r) "%eax", mov "%eax" (stackAddress x)]
 genIStmt (x :<-+ (a, Mul, b)) =
   unlines
     [ mov (showOperand a) "%eax",
@@ -39,29 +40,35 @@ genIStmt (x :<-+ (a, Mod, b)) =
     ]
 genIStmt (x :<-+ (a, Add, b)) =
   unlines
-    [ mov (showOperand a) (stackAddress x),
-      "add" ++ showOperand b ++ stackAddress x
+    [ mov (showOperand a) "%eax",
+      "addl " ++ showOperand b ++ ", %eax",
+      mov "%eax" (stackAddress x)
     ]
 genIStmt (x :<-+ (a, Sub, b)) =
   unlines
-    [ mov (showOperand a) (stackAddress x),
-      "sub" ++ showOperand b ++ stackAddress x
+    [ mov (showOperand a) "%eax",
+      "subl " ++ showOperand b ++ ", %eax",
+      mov "%eax" (stackAddress x)
     ]
 genIStmt (Unary reg Neg a) =
   unlines
-    [ mov (showOperand a) (stackAddress reg),
-      "neg " ++ stackAddress reg
+    [ mov (showOperand a) "%eax",
+      "negl %eax",
+      mov "%eax" (stackAddress reg)
     ]
 
 stackAddress :: VRegister -> String
-stackAddress reg = show reg ++ "(%rsp)"
+stackAddress reg = show (negate $ (reg + 1) * 4) ++ "(%rsp)"
 
 showOperand :: Operand -> String
-showOperand (Imm a) = "$" ++ show a
+showOperand (Imm a) = decConst a
 showOperand (Reg r) = stackAddress r
 
 mov :: String -> String -> String
-mov from to = "mov " ++ from ++ ", " ++ to
+mov from to = "movl " ++ from ++ ", " ++ to
 
-decConst :: Int -> String
+decConst :: Integer -> String
 decConst i = '$' : show i
+
+preamble :: String
+preamble = ".global main\n.global _main\n.text\nmain:\ncall _main\n# move the return value into the first argument for the syscall\nmovq %rax, %rdi\n# move the exit syscall number into rax\nmovq $0x3C, %rax\nsyscall\n_main:"
