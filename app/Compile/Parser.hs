@@ -16,6 +16,7 @@ import           Numeric (showHex)
 import           Text.Megaparsec
 import           Text.Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer as L
+import Data.Char (isAscii)
 
 parseAST :: FilePath -> L1ExceptT AST
 parseAST path = do
@@ -116,7 +117,7 @@ identExpr = do
 
 opTable :: [[Operator Parser Expr]]
 opTable =
-  [ [Prefix (UnExpr Neg <$ manyUnaryOp)]
+  [ [Prefix (manyUnaryOp)]
   , [ InfixL (BinExpr Mul <$ symbol "*")
     , InfixL (BinExpr Div <$ symbol "/")
     , InfixL (BinExpr Mod <$ symbol "%")
@@ -230,6 +231,7 @@ operator = lexeme ((:) <$> opStart <*> many opLetter)
 -- Identifiers
 identStart :: Parser Char
 identStart = letterChar <|> char '_'
+--  where validLetter = satisfy (\c -> isAlpha c && isAscii c)
 
 identLetter :: Parser Char
 identLetter = alphaNumChar <|> char '_'
