@@ -20,7 +20,7 @@ genIStmt (x :<-+ (a, Mul, b)) =
     [ mov (showOperand a) "%eax",
       mov (showOperand b) "%ebx",
       "imul %eax, %ebx",
-      mov "%eax" (stackAddress x)
+      mov "%ebx" (stackAddress x)
     ]
 genIStmt (x :<-+ (a, Div, b)) =
   unlines
