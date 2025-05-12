@@ -3,6 +3,7 @@ module Compile.AST
   , Stmt(..)
   , Expr(..)
   , Op(..)
+  , UnOp(..)
   , showAsgnOp
   , posPretty
   ) where
@@ -22,7 +23,7 @@ data Stmt
 data Expr
   = IntExpr Integer SourcePos
   | Ident String SourcePos
-  | UnExpr Op Expr
+  | UnExpr UnOp Expr
   | BinExpr Op Expr Expr
 
 -- Nothing means =, Just is for +=, %=, ...
@@ -33,8 +34,9 @@ data Op
   | Add
   | Sub
   | Div
-  | Neg
   | Mod
+
+data UnOp = Neg
 
 -- re-exported for convenience
 posPretty :: SourcePos -> String
@@ -67,8 +69,10 @@ instance Show Op where
   show Add = "+"
   show Sub = "-"
   show Div = "/"
-  show Neg = "-"
   show Mod = "%"
+
+instance Show UnOp where
+  show Neg = "-"
 
 showAsgnOp :: AsgnOp -> String
 showAsgnOp (Just op) = " " ++ show op ++ "= "

@@ -20,5 +20,5 @@ compile job = do
   ast <- parseAST $ src job
   semanticAnalysis ast
   let code = codeGen ast
-  liftIO $ writeFile (out job) (unlines code)
+  liftIO $ writeFile (out job) (unlines $ map show code)
   return ()
