@@ -1,13 +1,12 @@
 module Compile.CodeGen
-  ( codeGen
-  ) where
+  ( codeGen,
+  )
+where
 
-import           Compile.AST (AST(..), Expr(..), Stmt(..))
-
-import           Control.Monad.State
-import qualified Data.Map as Map
+import Compile.AST (AST (..), Expr (..), Stmt (..))
 import Compile.IR
-
+import Control.Monad.State
+import qualified Data.Map as Map
 
 type VarName = String
 
@@ -16,18 +15,15 @@ type AAsmAlloc = Map.Map VarName VRegister
 type CodeGen a = State CodeGenState a
 
 data CodeGenState = CodeGenState
-  { regMap :: AAsmAlloc
-  , nextReg :: VRegister
-  , code :: IR
+  { regMap :: AAsmAlloc,
+    nextReg :: VRegister,
+    code :: IR
   }
 
 codeGen :: AST -> IR
 codeGen (Block stmts _) = code $ execState (genBlock stmts) initialState
   where
     initialState = CodeGenState Map.empty 0 []
-
--- regName :: VRegister -> String
--- regName n = "%" ++ show n
 
 freshReg :: CodeGen VRegister
 freshReg = do
@@ -58,37 +54,40 @@ genStmt (Decl name _) = do
   r <- freshReg
   assignVar name r
 genStmt (Init name e _) = do
-  rhs <- genExpr e
-  r <- freshReg -- TODO: Maybe we don't need a fresh registers
+  r <- freshReg 
+  assignTo r e
   assignVar name r
-  emit $ r :<- rhs
-genStmt (Asgn name Nothing e _) = do -- normal assingment
-  rhs <- genExpr e
+genStmt (Asgn name Nothing e _) = do
   lhs <- lookupVar name
-  emit $ lhs :<- rhs
+  assignTo lhs e
 genStmt (Asgn name (Just op) e _) = do
-  rhs <- genExpr e
   lhs <- lookupVar name
-  emit $ lhs :<-+ (Reg lhs, op, rhs)
+  x <- toOperand e
+  emit $ lhs :<-+ (Reg lhs, op, x)
 genStmt (Ret e _) = do
-  r <- genExpr e
-  emit $ Return r
+  x <- toOperand e
+  emit $ Return x
 
-genExpr :: Expr -> CodeGen Operand
-genExpr (IntExpr n _) = do
-  -- r <- freshReg
-  return (Imm n)
-genExpr (Ident name _) = do
+toOperand :: Expr -> CodeGen Operand
+toOperand (IntExpr n _) = pure $ Imm n
+toOperand (Ident name _) = do
   r <- lookupVar name
-  return (Reg r)
-genExpr (UnExpr op e) = do
-  r1 <- genExpr e
-  r <- freshReg
-  emit $ Unary r op r1
-  return (Reg r)
-genExpr (BinExpr op e1 e2) = do
-  r1 <- genExpr e1
-  r2 <- genExpr e2
-  r <- freshReg
-  emit $ r :<-+ (r1, op, r2)
-  return (Reg r)
+  return $ Reg r
+toOperand e = do
+  t <- freshReg
+  assignTo t e
+  return $ Reg t
+
+assignTo :: VRegister -> Expr -> CodeGen ()
+assignTo d (IntExpr n _) = do
+  emit $ d :<- Imm n
+assignTo d (Ident name _) = do
+  r <- lookupVar name
+  emit $ d :<- Reg r
+assignTo d (UnExpr op e) = do
+  x <- toOperand e
+  emit $ Unary d op x
+assignTo d (BinExpr op e1 e2) = do
+  x1 <- toOperand e1
+  x2 <- toOperand e2
+  emit $ d :<-+ (x1, op, x2)
