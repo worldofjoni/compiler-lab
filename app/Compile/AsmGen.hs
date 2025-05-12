@@ -24,16 +24,16 @@ genIStmt (x :<-+ (a, Mul, b)) =
     ]
 genIStmt (x :<-+ (a, Div, b)) =
   unlines
-    [ "xor %edx, %edx",
-      mov (showOperand a) "%eax",
+    [ mov (showOperand a) "%eax",
+      "cdq",
       mov (showOperand b) "%ecx",
       "idiv %ecx",
       mov "%eax" (stackAddress x)
     ]
 genIStmt (x :<-+ (a, Mod, b)) =
   unlines
-    [ "xor %edx, %edx",
-      mov (showOperand a) "%eax",
+    [ mov (showOperand a) "%eax",
+      "cdq",
       mov (showOperand b) "%ecx",
       "idiv %ecx",
       mov "%edx" (stackAddress x)
