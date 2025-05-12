@@ -15,11 +15,6 @@ type AAsmAlloc = Map.Map VarName VRegister
 
 type CodeGen a = State CodeGenState a
 
-type IR = [IStmt]
-data IStmt = Return VRegister | VRegister :<- VRegister | VRegister :<-+ (VRegister,  Op, VRegister)
-
-
-
 
 data CodeGenState = CodeGenState
   { regMap :: AAsmAlloc
