@@ -4,6 +4,11 @@ A toy compiler for a subset of the C0 language.
 This is some starter code for students taking the Compiler Design class at KIT in the summer term 2025.
 If you are not all that familiar with the Haskell language, the `Documentation` section below contains a little walkthrough of the codebase.
 
+
+## Used Libraries
+For a full list, see the [cabal file](l1c.cabal).
+- `process` to launch os processes
+
 ## SSA translation & IR
 
 For now, this compiler translates the representation of the AST directly into assembly code after the semantic analysis phase.
