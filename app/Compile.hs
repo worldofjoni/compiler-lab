@@ -4,8 +4,8 @@ module Compile
   )
 where
 
-import Compile.AsmGen (genAsm)
-import Compile.CodeGen (codeGen)
+import Compile.Translate (translate)
+import Compile.CodeGen (genAsm)
 import Compile.Parser (parseAST)
 import Compile.Semantic (semanticAnalysis)
 import Control.Monad.IO.Class
@@ -22,7 +22,7 @@ compile :: Job -> L1ExceptT ()
 compile job = do
   ast <- parseAST $ src job
   semanticAnalysis ast
-  let ir = codeGen ast
+  let ir = translate ast
   let asm = genAsm 0 ir
   liftIO . putStrLn . enumLines $ asm
   _ <- liftIO $ readProcess "gcc" ["-x", "assembler", "-", "-o", out job] asm

@@ -1,93 +1,74 @@
-module Compile.CodeGen
-  ( codeGen,
-  )
-where
+module Compile.CodeGen (genAsm, genIStmt) where
 
-import Compile.AST (AST (..), Expr (..), Stmt (..))
-import Compile.IR
-import Control.Monad.State
-import qualified Data.Map as Map
+import Compile.AST (Op (..), UnOp (..))
+import Compile.IR (IR, IStmt (..), Operand (..), VRegister)
 
-type VarName = String
+type Asm = String
 
-type AAsmAlloc = Map.Map VarName VRegister
+genAsm :: Int -> IR -> Asm
+genAsm numRegs = unlines . (preamble : {-. (initStack numRegs :)-}) . map genIStmt
 
-type CodeGen a = State CodeGenState a
+-- initStack :: Int -> Asm
+-- initStack numRegs = "sub" ++ decConst (numRegs * 4) ++ "%rsp" -- move stack pointer
 
-data CodeGenState = CodeGenState
-  { regMap :: AAsmAlloc,
-    nextReg :: VRegister,
-    code :: IR
-  }
+genIStmt :: IStmt -> String
+genIStmt (Return o) = unlines [mov (showOperand o) "%eax", "ret"]
+genIStmt (x :<- (Imm i)) = mov (decConst i) (stackAddress x)
+genIStmt (x :<- (Reg r)) = unlines [mov (stackAddress r) "%eax", mov "%eax" (stackAddress x)]
+genIStmt (x :<-+ (a, Mul, b)) =
+  unlines
+    [ mov (showOperand a) "%eax",
+      mov (showOperand b) "%ebx",
+      "imul %eax, %ebx",
+      mov "%ebx" (stackAddress x)
+    ]
+genIStmt (x :<-+ (a, Div, b)) =
+  unlines
+    [ mov (showOperand a) "%eax",
+      "cdq",
+      mov (showOperand b) "%ecx",
+      "idiv %ecx",
+      mov "%eax" (stackAddress x)
+    ]
+genIStmt (x :<-+ (a, Mod, b)) =
+  unlines
+    [ mov (showOperand a) "%eax",
+      "cdq",
+      mov (showOperand b) "%ecx",
+      "idiv %ecx",
+      mov "%edx" (stackAddress x)
+    ]
+genIStmt (x :<-+ (a, Add, b)) =
+  unlines
+    [ mov (showOperand a) "%eax",
+      "addl " ++ showOperand b ++ ", %eax",
+      mov "%eax" (stackAddress x)
+    ]
+genIStmt (x :<-+ (a, Sub, b)) =
+  unlines
+    [ mov (showOperand a) "%eax",
+      "subl " ++ showOperand b ++ ", %eax",
+      mov "%eax" (stackAddress x)
+    ]
+genIStmt (Unary reg Neg a) =
+  unlines
+    [ mov (showOperand a) "%eax",
+      "negl %eax",
+      mov "%eax" (stackAddress reg)
+    ]
 
-codeGen :: AST -> IR
-codeGen (Block stmts _) = code $ execState (genBlock stmts) initialState
-  where
-    initialState = CodeGenState Map.empty 0 []
+stackAddress :: VRegister -> String
+stackAddress reg = show (negate $ (reg + 1) * 4) ++ "(%rsp)"
 
-freshReg :: CodeGen VRegister
-freshReg = do
-  curr <- get
-  let r = nextReg curr
-  put curr {nextReg = r + 1}
-  return r
+showOperand :: Operand -> String
+showOperand (Imm a) = decConst a
+showOperand (Reg r) = stackAddress r
 
-assignVar :: VarName -> VRegister -> CodeGen ()
-assignVar name r = do
-  modify $ \s -> s {regMap = Map.insert name r (regMap s)}
+mov :: String -> String -> String
+mov from to = "movl " ++ from ++ ", " ++ to
 
-lookupVar :: VarName -> CodeGen VRegister
-lookupVar name = do
-  m <- gets regMap
-  case Map.lookup name m of
-    Just r -> return r
-    Nothing -> error "unreachable, fix your semantic analysis I guess"
+decConst :: Integer -> String
+decConst i = '$' : show i
 
-emit :: IStmt -> CodeGen ()
-emit instr = modify $ \s -> s {code = code s ++ [instr]}
-
-genBlock :: [Stmt] -> CodeGen ()
-genBlock = mapM_ genStmt
-
-genStmt :: Stmt -> CodeGen ()
-genStmt (Decl name _) = do
-  r <- freshReg
-  assignVar name r
-genStmt (Init name e _) = do
-  r <- freshReg 
-  assignTo r e
-  assignVar name r
-genStmt (Asgn name Nothing e _) = do
-  lhs <- lookupVar name
-  assignTo lhs e
-genStmt (Asgn name (Just op) e _) = do
-  lhs <- lookupVar name
-  x <- toOperand e
-  emit $ lhs :<-+ (Reg lhs, op, x)
-genStmt (Ret e _) = do
-  x <- toOperand e
-  emit $ Return x
-
-toOperand :: Expr -> CodeGen Operand
-toOperand (IntExpr n _) = pure . Imm . read $ n
-toOperand (Ident name _) = do
-  r <- lookupVar name
-  return $ Reg r
-toOperand e = do
-  t <- freshReg
-  assignTo t e
-  return $ Reg t
-
-assignTo :: VRegister -> Expr -> CodeGen ()
-assignTo d (IntExpr n _) = do
-  emit $ d :<- Imm (read n)
-assignTo d (Ident name _) = do
-  r <- lookupVar name
-  emit $ d :<- Reg r
-assignTo d (UnExpr op e) = do
-  x <- toOperand e
-  emit $ Unary d op x
-assignTo d (BinExpr op e1 e2) = do
-  x1 <- toOperand e1
-  x2 <- toOperand e2
-  emit $ d :<-+ (x1, op, x2)
+preamble :: String
+preamble = ".global main\n.global _main\n.text\nmain:\ncall _main\n# move the return value into the first argument for the syscall\nmovq %rax, %rdi\n# move the exit syscall number into rax\nmovq $0x3C, %rax\nsyscall\n_main:"
