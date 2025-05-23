@@ -2,11 +2,12 @@ module Compile.CodeGen (genAsm, genIStmt) where
 
 import Compile.AST (Op (..), UnOp (..))
 import Compile.IR (IR, IStmt (..), Operand (..), VRegister)
+import Data.Foldable (Foldable (toList))
 
 type Asm = String
 
 genAsm :: Int -> IR -> Asm
-genAsm numRegs = unlines . (preamble : {-. (initStack numRegs :)-}) . map genIStmt
+genAsm numRegs = unlines . (preamble : {-. (initStack numRegs :)-}) . toList . fmap genIStmt
 
 -- initStack :: Int -> Asm
 -- initStack numRegs = "sub" ++ decConst (numRegs * 4) ++ "%rsp" -- move stack pointer
