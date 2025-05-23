@@ -5,6 +5,7 @@ where
 
 import Compile.AST (AST, Block (Block), Expr (..), Simp (Asgn, Decl, Init), Stmt (..), Type (IntType), posPretty)
 import Compile.Parser (parseNumber)
+import Control.Monad (unless, when)
 import Control.Monad.State
 import qualified Data.Map as Map
 import Error (L1ExceptT, semanticFail)
