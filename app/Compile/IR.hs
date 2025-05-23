@@ -7,10 +7,12 @@ module Compile.IR
 where
 
 import Compile.AST (Op, UnOp)
+import GHC.Arr (Array)
+
 
 type VRegister = Int -- virtual register
 
-type IR = [IStmt]
+type IR = Array Int IStmt
 
 data Operand = Reg VRegister | Imm Integer
 
