@@ -1,19 +1,6 @@
 module Compile.AST
-  ( AST (..),
-    Stmt (..),
-    Expr (..),
-    Op (..),
-    UnOp (..),
-    showAsgnOp,
-    posPretty,
-  )
 where
 
-import Data.Bifunctor (Bifunctor)
-import Data.Bits (Xor)
-import Data.List (intercalate)
-import GHC.IO.Handle (LockMode (SharedLock))
-import Options.Applicative.Help (SimpleDoc)
 import Text.Megaparsec
 
 type AST = Program
@@ -32,12 +19,12 @@ data Stmt
   | For (Maybe Simp) Expr (Maybe Simp) Stmt SourcePos
   | Break SourcePos
   | Contiue SourcePos
-  | Return SourcePos
+  | Ret Expr SourcePos
 
 data Simp
   = Decl Type SourcePos
   | Init Type Expr SourcePos
-  | Asign LValue AsgnOp Expr
+  | Asgn LValue AsgnOp Expr SourcePos
 
 data LValue = Ident String SourcePos
 
@@ -45,8 +32,8 @@ data Expr
   = IntExpr String SourcePos
   | BoolExpr Bool SourcePos
   | IdentExpr String SourcePos
-  | Binop Expr Op Expr SourcePos
-  | Unop UnOp Expr SourcePos
+  | BinExpr Expr Op Expr SourcePos
+  | UnExpr UnOp Expr SourcePos
   | Trinay Expr Expr Expr SourcePos
 
 -- Nothing means =, Just is for +=, %=, ...

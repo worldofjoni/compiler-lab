@@ -3,10 +3,11 @@ module Compile.Translate
   )
 where
 
-import Compile.AST (AST (..), Expr (..), Stmt (..))
+import Compile.AST
 import Compile.IR
 import Control.Monad.State
 import qualified Data.Map as Map
+import GHC.Arr (numElements, (//))
 
 type VarName = String
 
@@ -44,23 +45,23 @@ lookupVar name = do
     Nothing -> error "unreachable, fix your semantic analysis I guess"
 
 emit :: IStmt -> Translate ()
-emit instr = modify $ \s -> s {code = code s ++ [instr]}
+emit instr = modify $ \s -> s {code = code s // [(numElements $ code s ,instr)]}
 
 genBlock :: [Stmt] -> Translate ()
 genBlock = mapM_ genStmt
 
 genStmt :: Stmt -> Translate ()
-genStmt (Decl name _) = do
+genStmt (SimpStmt (Decl t name _) _) = do
   r <- freshReg
   assignVar name r
-genStmt (Init name e _) = do
+genStmt (SimpStmt (Init t name e _) _) = do
   r <- freshReg 
   assignTo r e
   assignVar name r
-genStmt (Asgn name Nothing e _) = do
+genStmt (SimpStmt (Asgn name Nothing e _) _) = do
   lhs <- lookupVar name
   assignTo lhs e
-genStmt (Asgn name (Just op) e _) = do
+genStmt (SimpStmt (Asgn name (Just op) e _) _) = do
   lhs <- lookupVar name
   x <- toOperand e
   emit $ lhs :<-+ (Reg lhs, op, x)
@@ -70,7 +71,7 @@ genStmt (Ret e _) = do
 
 toOperand :: Expr -> Translate Operand
 toOperand (IntExpr n _) = pure . Imm . read $ n
-toOperand (Ident name _) = do
+toOperand (IdentExpr name _) = do
   r <- lookupVar name
   return $ Reg r
 toOperand e = do
@@ -81,13 +82,13 @@ toOperand e = do
 assignTo :: VRegister -> Expr -> Translate ()
 assignTo d (IntExpr n _) = do
   emit $ d :<- Imm (read n)
-assignTo d (Ident name _) = do
+assignTo d (IdentExpr name _) = do
   r <- lookupVar name
   emit $ d :<- Reg r
-assignTo d (UnExpr op e) = do
+assignTo d (UnExpr op e _) = do
   x <- toOperand e
   emit $ Unary d op x
-assignTo d (BinExpr op e1 e2) = do
+assignTo d (BinExpr e1 op e2 _) = do
   x1 <- toOperand e1
   x2 <- toOperand e2
   emit $ d :<-+ (x1, op, x2)
