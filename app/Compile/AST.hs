@@ -22,11 +22,10 @@ data Stmt
   | Ret Expr SourcePos
 
 data Simp
-  = Decl Type SourcePos
-  | Init Type Expr SourcePos
-  | Asgn LValue AsgnOp Expr SourcePos
+  = Decl Type String SourcePos
+  | Init Type String Expr SourcePos
+  | Asgn String AsgnOp Expr SourcePos
 
-data LValue = Ident String SourcePos
 
 data Expr
   = IntExpr String SourcePos

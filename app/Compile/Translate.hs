@@ -7,7 +7,7 @@ import Compile.AST
 import Compile.IR
 import Control.Monad.State
 import qualified Data.Map as Map
-import GHC.Arr (numElements, (//))
+import GHC.Arr (numElements, (//), array)
 
 type VarName = String
 
@@ -24,7 +24,7 @@ data TranslateState = TranslateState
 translate :: AST -> IR
 translate (Block stmts _) = code $ execState (genBlock stmts) initialState
   where
-    initialState = TranslateState Map.empty 0 []
+    initialState = TranslateState Map.empty 0 (array (0,0) [])
 
 freshReg :: Translate VRegister
 freshReg = do
