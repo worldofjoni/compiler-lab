@@ -1,14 +1,13 @@
 module Compile.Semantic
-  ( semanticAnalysis
-  ) where
+  ( semanticAnalysis,
+  )
+where
 
-import           Compile.AST (AST(..), Expr(..), Stmt(..), posPretty)
-import           Compile.Parser (parseNumber)
-import           Error (L1ExceptT, semanticFail)
-
-import           Control.Monad (unless, when)
-import           Control.Monad.State
+import Compile.AST (AST, Block (Block), Expr (..), Simp (Asgn, Decl, Init), Stmt (..), Type (IntType), posPretty)
+import Compile.Parser (parseNumber)
+import Control.Monad.State
 import qualified Data.Map as Map
+import Error (L1ExceptT, semanticFail)
 
 data VariableStatus
   = Declared
@@ -40,51 +39,51 @@ varStatusAnalysis (Block stmts _) = do
 -- + a variable needs to be declared or initialized before we can assign to it
 -- + we can only return valid expressions
 checkStmt :: Stmt -> L1Semantic ()
-checkStmt (Decl name pos) = do
+checkStmt (Ret e _) = checkExpr e
+checkStmt (SimpStmt s) = checkSimp s
+
+checkSimp :: Simp -> L1Semantic ()
+checkSimp (Decl IntType name pos) = do
   ns <- get
   let isDeclared = Map.member name ns
-  when isDeclared
-    $ semanticFail'
-    $ "Variable " ++ name ++ " redeclared at: " ++ posPretty pos
+  when isDeclared $
+    semanticFail' $
+      "Variable " ++ name ++ " redeclared at: " ++ posPretty pos
   put $ Map.insert name Declared ns
-checkStmt (Init name e pos) = do
+checkSimp (Init IntType name e pos) = do
   ns <- get
   let isDeclared = Map.member name ns
-  when isDeclared
-    $ semanticFail'
-    $ "Variable " ++ name ++ " redeclared (initialized) at: " ++ posPretty pos
+  when isDeclared $
+    semanticFail' $
+      "Variable " ++ name ++ " redeclared (initialized) at: " ++ posPretty pos
   checkExpr e
   put $ Map.insert name Initialized ns
-checkStmt (Asgn name op e pos) = do
+checkSimp (Asgn name op e pos) = do
   ns <- get
   case op of
     Nothing -> do
       -- Assignment with `=`
       -- If we assign to a variable with `=`, it has to be either declared or initialized
-      unless (Map.member name ns)
-        $ semanticFail'
-        $ "Trying to assign to undeclared variable "
+      unless (Map.member name ns) $
+        semanticFail' $
+          "Trying to assign to undeclared variable "
             ++ name
             ++ " at: "
             ++ posPretty pos
       checkExpr e
       put $ Map.insert name Initialized ns
-    Just _
-    -- Assinging with op, e.g. `x += 3`,
-    -- for this x needs to be intialized, not just declasred
-     ->
+    Just _ ->
+      -- Assinging with op, e.g. `x += 3`,
+      -- for this x needs to be intialized, not just declasred
       case Map.lookup name ns of
         Just Initialized -> do
           checkExpr e
         _ ->
-          semanticFail'
-            $ "Trying to assignOp to undeclared variable "
-                ++ name
-                ++ " at: "
-                ++ posPretty pos
-
-
-checkStmt (Ret e _) = checkExpr e
+          semanticFail' $
+            "Trying to assignOp to undeclared variable "
+              ++ name
+              ++ " at: "
+              ++ posPretty pos
 
 checkExpr :: Expr -> L1Semantic ()
 checkExpr (IntExpr str pos) = do
@@ -94,18 +93,18 @@ checkExpr (IntExpr str pos) = do
     Left e -> do
       semanticFail' $ "Error in " ++ posPretty pos ++ e
     Right _ -> return ()
-checkExpr (Ident name pos) = do
+checkExpr (IdentExpr name pos) = do
   ns <- get
   case Map.lookup name ns of
     Just Initialized -> return ()
     _ ->
-      semanticFail'
-        $ "Variable "
-            ++ name
-            ++ " used without initialization at: "
-            ++ posPretty pos
+      semanticFail' $
+        "Variable "
+          ++ name
+          ++ " used without initialization at: "
+          ++ posPretty pos
 checkExpr (UnExpr _ e) = checkExpr e
-checkExpr (BinExpr _ lhs rhs) = checkExpr lhs >> checkExpr rhs
+checkExpr (BinExpr lhs _ rhs) = checkExpr lhs >> checkExpr rhs
 
 checkReturns :: AST -> L1Semantic ()
 checkReturns (Block stmts _) = do

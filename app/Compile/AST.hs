@@ -1,5 +1,4 @@
-module Compile.AST
-where
+module Compile.AST where
 
 import Text.Megaparsec
 
@@ -12,7 +11,7 @@ data Block = Block [Stmt] SourcePos
 data Type = IntType | BoolType
 
 data Stmt
-  = SimpStmt Simp SourcePos
+  = SimpStmt Simp
   | BlockStmt Block SourcePos
   | If Expr Stmt (Maybe Stmt) SourcePos
   | While Expr Stmt
@@ -26,13 +25,12 @@ data Simp
   | Init Type String Expr SourcePos
   | Asgn String AsgnOp Expr SourcePos
 
-
 data Expr
   = IntExpr String SourcePos
   | BoolExpr Bool SourcePos
   | IdentExpr String SourcePos
-  | BinExpr Expr Op Expr SourcePos
-  | UnExpr UnOp Expr SourcePos
+  | BinExpr Expr Op Expr
+  | UnExpr UnOp Expr
   | Trinay Expr Expr Expr SourcePos
 
 -- Nothing means =, Just is for +=, %=, ...

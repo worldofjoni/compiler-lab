@@ -4,7 +4,7 @@ module Compile.Parser
   )
 where
 
-import Compile.AST (AST (..), Expr (..), Op (..), Stmt (..), UnOp (..))
+import Compile.AST (AST, Block (Block), Expr (..), Op (..), Simp (Asgn, Decl, Init), Stmt (..), Type (IntType), UnOp (..))
 import Control.Monad.Combinators.Expr
 import Control.Monad.IO.Class (liftIO)
 import Data.Char (isAlpha, isAscii, isDigit)
@@ -48,30 +48,30 @@ astParser = do
 
 stmt :: Parser Stmt
 stmt = do
-  s <- try decl <|> try simp <|> ret
+  s <- try (SimpStmt <$> decl) <|> try (SimpStmt <$> simp) <|> ret
   semi
   return s
 
-decl :: Parser Stmt
+decl :: Parser Simp
 decl = try declInit <|> declNoInit
 
-declNoInit :: Parser Stmt
+declNoInit :: Parser Simp
 declNoInit = do
   pos <- getSourcePos
   reserved "int"
   name <- identifier
-  return $ Decl name pos
+  return $ Decl IntType name pos
 
-declInit :: Parser Stmt
+declInit :: Parser Simp
 declInit = do
   pos <- getSourcePos
   reserved "int"
   name <- identifier
   void $ symbol "="
   e <- expr
-  return $ Init name e pos
+  return $ Init IntType name e pos
 
-simp :: Parser Stmt
+simp :: Parser Simp
 simp = do
   pos <- getSourcePos
   name <- lvalue
@@ -113,16 +113,16 @@ identExpr :: Parser Expr
 identExpr = do
   pos <- getSourcePos
   name <- identifier
-  return $ Ident name pos
+  return $ IdentExpr name pos
 
 opTable :: [[Operator Parser Expr]]
 opTable =
   [ [Prefix manyUnaryOp],
-    [ InfixL (BinExpr Mul <$ symbol "*"),
-      InfixL (BinExpr Div <$ symbol "/"),
-      InfixL (BinExpr Mod <$ symbol "%")
+    [ InfixL (flip BinExpr Mul <$ symbol "*"),
+      InfixL (flip BinExpr Div <$ symbol "/"),
+      InfixL (flip BinExpr Mod <$ symbol "%")
     ],
-    [InfixL (BinExpr Add <$ symbol "+"), InfixL (BinExpr Sub <$ symbol "-")]
+    [InfixL (flip BinExpr Add <$ symbol "+"), InfixL (flip BinExpr Sub <$ symbol "-")]
   ]
   where
     -- this allows us to parse `---x` as `-(-(-x))`

@@ -7,7 +7,7 @@ import Compile.AST
 import Compile.IR
 import Control.Monad.State
 import qualified Data.Map as Map
-import GHC.Arr (numElements, (//), array)
+import GHC.Arr (array, numElements, (//))
 
 type VarName = String
 
@@ -24,7 +24,7 @@ data TranslateState = TranslateState
 translate :: AST -> IR
 translate (Block stmts _) = code $ execState (genBlock stmts) initialState
   where
-    initialState = TranslateState Map.empty 0 (array (0,0) [])
+    initialState = TranslateState Map.empty 0 (array (0, 0) [])
 
 freshReg :: Translate VRegister
 freshReg = do
@@ -45,23 +45,23 @@ lookupVar name = do
     Nothing -> error "unreachable, fix your semantic analysis I guess"
 
 emit :: IStmt -> Translate ()
-emit instr = modify $ \s -> s {code = code s // [(numElements $ code s ,instr)]}
+emit instr = modify $ \s -> s {code = code s // [(numElements $ code s, instr)]}
 
 genBlock :: [Stmt] -> Translate ()
 genBlock = mapM_ genStmt
 
 genStmt :: Stmt -> Translate ()
-genStmt (SimpStmt (Decl t name _) _) = do
+genStmt (SimpStmt (Decl t name _)) = do
   r <- freshReg
   assignVar name r
-genStmt (SimpStmt (Init t name e _) _) = do
-  r <- freshReg 
+genStmt (SimpStmt (Init t name e _)) = do
+  r <- freshReg
   assignTo r e
   assignVar name r
-genStmt (SimpStmt (Asgn name Nothing e _) _) = do
+genStmt (SimpStmt (Asgn name Nothing e _)) = do
   lhs <- lookupVar name
   assignTo lhs e
-genStmt (SimpStmt (Asgn name (Just op) e _) _) = do
+genStmt (SimpStmt (Asgn name (Just op) e _)) = do
   lhs <- lookupVar name
   x <- toOperand e
   emit $ lhs :<-+ (Reg lhs, op, x)
@@ -85,10 +85,10 @@ assignTo d (IntExpr n _) = do
 assignTo d (IdentExpr name _) = do
   r <- lookupVar name
   emit $ d :<- Reg r
-assignTo d (UnExpr op e _) = do
+assignTo d (UnExpr op e) = do
   x <- toOperand e
   emit $ Unary d op x
-assignTo d (BinExpr e1 op e2 _) = do
+assignTo d (BinExpr e1 op e2) = do
   x1 <- toOperand e1
   x2 <- toOperand e2
   emit $ d :<-+ (x1, op, x2)
