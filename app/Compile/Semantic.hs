@@ -3,9 +3,8 @@ module Compile.Semantic
   )
 where
 
-import Compile.AST (AST, Block (Block), Expr (..), Simp (Asgn, Decl, Init), Stmt (..), Type (IntType), posPretty)
+import Compile.AST (AST, Expr (..), Simp (Asgn, Decl, Init), Stmt (..), Type (IntType), posPretty)
 import Compile.Parser (parseNumber)
-import Control.Monad (unless, when)
 import Control.Monad.State
 import qualified Data.Map as Map
 import Error (L1ExceptT, semanticFail)
@@ -31,7 +30,7 @@ semanticAnalysis ast = do
 
 -- right now an AST is just a list of statements
 varStatusAnalysis :: AST -> L1ExceptT Namespace
-varStatusAnalysis (Block stmts _) = do
+varStatusAnalysis stmts = do
   execStateT (mapM_ checkStmt stmts) Map.empty
 
 -- So far this checks:
@@ -108,7 +107,7 @@ checkExpr (UnExpr _ e) = checkExpr e
 checkExpr (BinExpr lhs _ rhs) = checkExpr lhs >> checkExpr rhs
 
 checkReturns :: AST -> L1Semantic ()
-checkReturns (Block stmts _) = do
+checkReturns stmts = do
   let returns = any isReturn stmts
   unless returns $ semanticFail' "Program does not return"
   where

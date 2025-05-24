@@ -22,7 +22,7 @@ data TranslateState = TranslateState
   }
 
 translate :: AST -> IR
-translate (Block stmts _) = code $ execState (genBlock stmts) initialState
+translate stmts = code $ execState (genBlock stmts) initialState
   where
     initialState = TranslateState Map.empty 0 (array (0, 0) [])
 

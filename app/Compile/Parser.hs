@@ -4,7 +4,7 @@ module Compile.Parser
   )
 where
 
-import Compile.AST (AST, Block (Block), Expr (..), Op (..), Simp (Asgn, Decl, Init), Stmt (..), Type (IntType), UnOp (..))
+import Compile.AST (AST, Expr (..), Op (..), Simp (Asgn, Decl, Init), Stmt (..), Type (BoolType, IntType), UnOp (..))
 import Control.Monad.Combinators.Expr
 import Control.Monad.IO.Class (liftIO)
 import Data.Char (isAlpha, isAscii, isDigit)
@@ -39,40 +39,85 @@ astParser = do
   reserved "int"
   reserved "main"
   parens $ pure ()
-  mainBlock <- braces $ do
-    pos <- getSourcePos
-    stmts <- many stmt
-    return $ Block stmts pos
-  eof
-  return mainBlock
+  BlockStmt block _ <- parseBlock
+  return block
+
+parseType :: Parser Type
+parseType = IntType <$ reserved "int" <|> BoolType <$ reserved "bool" <?> "type"
 
 stmt :: Parser Stmt
-stmt = do
-  s <- try (SimpStmt <$> decl) <|> try (SimpStmt <$> simp) <|> ret
-  semi
-  return s
+stmt =
+  SimpStmt
+    <$> simp
+      <|> parseBlock
+      <|> parseIf
+      <|> parseWhile
+      <|> parseFor
+      <|> parseContinue
+      <|> parseBreak
+      <|> ret
 
-decl :: Parser Simp
-decl = try declInit <|> declNoInit
+parseBlock :: Parser Stmt
+parseBlock = do
+  pos <- getSourcePos
+  BlockStmt <$> braces (many stmt) <*> return pos
+
+parseIf :: Parser Stmt
+parseIf = do
+  pos <- getSourcePos
+  reserved "if"
+  cond <- parens expr
+  thenStmt <- stmt
+  elseStmt <- optional stmt
+  return $ If cond thenStmt elseStmt pos
+
+parseWhile :: Parser Stmt
+parseWhile = do
+  pos <- getSourcePos
+  reserved "while"
+  cond <- parens expr
+  body <- stmt
+  return $ While cond body pos
+
+parseFor :: Parser Stmt
+parseFor = do
+  pos <- getSourcePos
+  reserved "for"
+  (a, b, c) <- parens ((,,) <$> optional simp <* semi <*> expr <* semi <*> optional simp)
+  body <- stmt
+  return $ For a b c body pos
+
+parseContinue :: Parser Stmt
+parseContinue = do
+  pos <- getSourcePos
+  Contiue <$ reserved "continue" <* semi <*> return pos
+
+parseBreak :: Parser Stmt
+parseBreak = do
+  pos <- getSourcePos
+  Break <$ reserved "break" <* semi <*> return pos
+
+simp :: Parser Simp
+simp = (asign <|> try declInit <|> try declNoInit) <* semi
 
 declNoInit :: Parser Simp
 declNoInit = do
   pos <- getSourcePos
-  reserved "int"
+  type_ <- parseType
   name <- identifier
-  return $ Decl IntType name pos
+  return $ Decl type_ name pos
 
 declInit :: Parser Simp
 declInit = do
   pos <- getSourcePos
-  reserved "int"
+  type_ <- parseType
   name <- identifier
   void $ symbol "="
   e <- expr
-  return $ Init IntType name e pos
+  return $ Init type_ name e pos
 
-simp :: Parser Simp
-simp = do
+asign :: Parser Simp
+asign = do
   pos <- getSourcePos
   name <- lvalue
   op <- asnOp
@@ -89,6 +134,11 @@ asnOp =
       "-=" -> pure (Just Sub)
       "/=" -> pure (Just Div)
       "%=" -> pure (Just Mod)
+      "&=" -> pure $ Just BitAnd
+      "|=" -> pure $ Just BitOr
+      "^=" -> pure $ Just BitXor
+      "<<=" -> pure $ Just Shl
+      ">>=" -> pure $ Just Shr
       "=" -> pure Nothing
       x -> fail $ "Nonexistent assignment operator: " ++ x
     <?> "assignment operator"
@@ -101,13 +151,19 @@ ret = do
   return $ Ret e pos
 
 expr' :: Parser Expr
-expr' = parens expr <|> intExpr <|> identExpr
+expr' = parens expr <|> intExpr <|> boolExpr <|> identExpr
 
 intExpr :: Parser Expr
 intExpr = do
   pos <- getSourcePos
   str <- numberLiteral
   return $ IntExpr str pos
+
+boolExpr :: Parser Expr
+boolExpr = do
+  pos <- getSourcePos
+  value <- True <$ reserved "true" <|> False <$ reserved "false"
+  return $ BoolExpr value pos
 
 identExpr :: Parser Expr
 identExpr = do
@@ -117,17 +173,24 @@ identExpr = do
 
 opTable :: [[Operator Parser Expr]]
 opTable =
-  [ [Prefix manyUnaryOp],
-    [ InfixL (flip BinExpr Mul <$ symbol "*"),
-      InfixL (flip BinExpr Div <$ symbol "/"),
-      InfixL (flip BinExpr Mod <$ symbol "%")
-    ],
-    [InfixL (flip BinExpr Add <$ symbol "+"), InfixL (flip BinExpr Sub <$ symbol "-")]
+  [ [manyUnaryOp Neg "-", manyUnaryOp Not "!", manyUnaryOp BitNot "~"],
+    [infix_ Mul "*", infix_ Div "/", infix_ Mod "%"],
+    [infix_ Add "+", infix_ Sub "-"],
+    [infix_ Shl "<<", infix_ Shr ">>"],
+    [infix_ Lt "<", infix_ Gt ">", infix_ Le "<=", infix_ Ge ">="],
+    [infix_ Eq "==", infix_ Neq "!="],
+    [infix_ BitAnd "&"],
+    [infix_ BitOr "|"],
+    [infix_ BitXor "^"],
+    [infix_ And "&&"],
+    [infix_ Or "||"],
+    [TernR (Ternary <$ symbol "?" <$ symbol ":")]
   ]
   where
     -- this allows us to parse `---x` as `-(-(-x))`
     -- makeExprParser doesn't do this by default
-    manyUnaryOp = foldr1 (.) <$> some (UnExpr Neg <$ symbol "-")
+    manyUnaryOp op sym = Prefix $ foldr1 (.) <$> some (UnExpr op <$ symbol sym)
+    infix_ op sym = InfixL (flip BinExpr op <$ symbol sym)
 
 expr :: Parser Expr
 expr = makeExprParser expr' opTable <?> "expression"

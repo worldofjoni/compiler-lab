@@ -6,7 +6,7 @@ type AST = Program
 
 type Program = Block
 
-data Block = Block [Stmt] SourcePos
+type Block = [Stmt]
 
 data Type = IntType | BoolType
 
@@ -14,7 +14,7 @@ data Stmt
   = SimpStmt Simp
   | BlockStmt Block SourcePos
   | If Expr Stmt (Maybe Stmt) SourcePos
-  | While Expr Stmt
+  | While Expr Stmt SourcePos
   | For (Maybe Simp) Expr (Maybe Simp) Stmt SourcePos
   | Break SourcePos
   | Contiue SourcePos
@@ -31,7 +31,7 @@ data Expr
   | IdentExpr String SourcePos
   | BinExpr Expr Op Expr
   | UnExpr UnOp Expr
-  | Trinay Expr Expr Expr SourcePos
+  | Ternary Expr Expr Expr
 
 -- Nothing means =, Just is for +=, %=, ...
 type AsgnOp = Maybe Op
