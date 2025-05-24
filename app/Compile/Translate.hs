@@ -7,8 +7,6 @@ import Compile.AST
 import Compile.IR
 import Control.Monad.State
 import qualified Data.Map as Map
-import Data.IntMap (singleton)
-import GHC.IO.SubSystem (conditional)
 
 type VarName = String
 
@@ -67,21 +65,21 @@ emit instr = modify $ \s -> s {code = code s ++ [instr]}
 pushLoopEnd :: Label -> Translate ()
 pushLoopEnd l = modify $ \s -> s {loopEnds = l : loopEnds s}
 popLoopEnd :: () -> Translate ()
-popLoopEnd l = modify $ \s -> s {loopEnds = tail $ loopEnds s}
+popLoopEnd () = modify $ \s -> s {loopEnds = tail $ loopEnds s}
 
 pushLoopContinue :: Label -> Translate ()
 pushLoopContinue l = modify $ \s -> s {loopContinues = l : loopContinues s}
 popLoopContinue :: () -> Translate ()
-popLoopContinue l = modify $ \s -> s {loopContinues = tail $ loopContinues s}
+popLoopContinue () = modify $ \s -> s {loopContinues = tail $ loopContinues s}
 
 genBlock :: [Stmt] -> Translate ()
 genBlock = mapM_ genStmt
 
 genStmt :: Stmt -> Translate ()
-genStmt (SimpStmt (Decl t name _)) = do
+genStmt (SimpStmt (Decl _ name _)) = do
   r <- freshReg
   assignVar name r
-genStmt (SimpStmt (Init t name e _)) = do
+genStmt (SimpStmt (Init _ name e _)) = do
   r <- freshReg
   assignTo r e
   assignVar name r
@@ -123,11 +121,11 @@ genStmt (While condition body _) = do
   popLoopEnd ()
   popLoopContinue ()
   emit $ Label endLabel
-genStmt (For init condition after body _) = do
+genStmt (For initSimp condition after body _) = do
   loopLabel <- freshLabelWithPrefix "loop"
   endLabel <- freshLabelWithPrefix "endloop"
   continueLabel <- freshLabelWithPrefix "continueloop"
-  maybeGenSimp init
+  maybeGenSimp initSimp
   emit $ Label loopLabel
   pushLoopContinue continueLabel
   pushLoopEnd endLabel
@@ -142,13 +140,13 @@ genStmt (For init condition after body _) = do
 genStmt (Break _) = do
   curr <- get
   emit . Goto . head . loopEnds $ curr
-genStmt (Contiue _) = do
+genStmt (Continue _) = do
   curr <- get
   emit . Goto . head . loopContinues $ curr
-genStmt (BlockStmt (Block []  _) _) = pure ()
-genStmt (BlockStmt (Block (x:xs) _) sourcePos) = do
+genStmt (BlockStmt [] _) = pure ()
+genStmt (BlockStmt (x:xs) sourcePos) = do
   genStmt x
-  genStmt (BlockStmt (Block xs sourcePos)sourcePos)
+  genStmt (BlockStmt xs sourcePos)
   
 
 
@@ -191,7 +189,7 @@ assignTo d (BinExpr e1 op e2) = do
   x1 <- toOperand e1
   x2 <- toOperand e2
   emit $ d :<-+ (x1, op, x2)
-assignTo d (Trinay condition thenExpr elseExpr _) = do
+assignTo d (Ternary condition thenExpr elseExpr) = do
   elseLabel <- freshLabelWithPrefix "else"
   endLabel <- freshLabelWithPrefix "endif"
   o <- toOperand condition

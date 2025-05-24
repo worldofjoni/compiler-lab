@@ -17,7 +17,7 @@ data Stmt
   | While Expr Stmt SourcePos
   | For (Maybe Simp) Expr (Maybe Simp) Stmt SourcePos
   | Break SourcePos
-  | Contiue SourcePos
+  | Continue SourcePos
   | Ret Expr SourcePos
 
 data Simp
@@ -90,9 +90,25 @@ instance Show Op where
   show Sub = "-"
   show Div = "/"
   show Mod = "%"
+  show Shl = "<<"
+  show Shr = ">>"
+  show BitOr = "|"
+  show BitAnd = "&"
+  show BitXor = "^"
+  show Lt = "<="
+  show Gt = ">="
+  show Le = "<"
+  show Ge = ">"
+  show Eq = "=="
+  show Neq = "!="
+  show And = "&&"
+  show Or = "||"
+  
 
 instance Show UnOp where
   show Neg = "-"
+  show BitNot = "~"
+  show Not = "!"
 
 showAsgnOp :: AsgnOp -> String
 showAsgnOp (Just op) = " " ++ show op ++ "= "

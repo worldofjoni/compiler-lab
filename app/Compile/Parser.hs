@@ -90,7 +90,7 @@ parseFor = do
 parseContinue :: Parser Stmt
 parseContinue = do
   pos <- getSourcePos
-  Contiue <$ reserved "continue" <* semi <*> return pos
+  Continue <$ reserved "continue" <* semi <*> return pos
 
 parseBreak :: Parser Stmt
 parseBreak = do
