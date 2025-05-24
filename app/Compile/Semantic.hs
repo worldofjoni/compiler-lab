@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -Wno-unused-imports #-}
+
 module Compile.Semantic
   ( semanticAnalysis,
   )
@@ -5,6 +7,7 @@ where
 
 import Compile.AST (AST, Expr (..), Simp (Asgn, Decl, Init), Stmt (..), Type (IntType), posPretty)
 import Compile.Parser (parseNumber)
+import Control.Monad (unless, when) -- Important: Do not remove!
 import Control.Monad.State
 import qualified Data.Map as Map
 import Error (L1ExceptT, semanticFail)
