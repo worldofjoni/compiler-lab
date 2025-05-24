@@ -48,7 +48,7 @@ parseType = IntType <$ reserved "int" <|> BoolType <$ reserved "bool" <?> "type"
 stmt :: Parser Stmt
 stmt =
   SimpStmt
-    <$> simp
+    <$> (simp <* semi)
       <|> parseBlock
       <|> parseIf
       <|> parseWhile
@@ -68,7 +68,7 @@ parseIf = do
   reserved "if"
   cond <- parens expr
   thenStmt <- stmt
-  elseStmt <- optional stmt
+  elseStmt <- optional (reserved "else" >> stmt)
   return $ If cond thenStmt elseStmt pos
 
 parseWhile :: Parser Stmt
@@ -98,7 +98,7 @@ parseBreak = do
   Break <$ reserved "break" <* semi <*> return pos
 
 simp :: Parser Simp
-simp = (asign <|> try declInit <|> try declNoInit) <* semi
+simp = asign <|> try declInit <|> try declNoInit
 
 declNoInit :: Parser Simp
 declNoInit = do
@@ -148,6 +148,7 @@ ret = do
   pos <- getSourcePos
   reserved "return"
   e <- expr
+  semi
   return $ Ret e pos
 
 expr' :: Parser Expr
