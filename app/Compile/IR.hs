@@ -1,19 +1,13 @@
 module Compile.IR
-  ( VRegister,
-    IR,
-    IStmt (..),
-    Operand (..),
-  )
 where
 
 import Compile.AST (Op, UnOp)
-import GHC.Arr (Array)
 
 type VRegister = Int -- virtual register
 
-type LineNo = Int
+type Label = String
 
-type IR = Array LineNo IStmt
+type IR = [IStmt]
 
 data Operand = Reg VRegister | Imm Integer
 
@@ -22,8 +16,9 @@ data IStmt
   | VRegister :<- Operand
   | VRegister :<-+ (Operand, Op, Operand)
   | Unary VRegister UnOp Operand
-  | Goto LineNo
-  | GotoIf LineNo Operand
+  | Label Label
+  | Goto Label
+  | GotoIfNot Label Operand
   | Nop
 
 instance Show Operand where
@@ -37,4 +32,4 @@ instance Show IStmt where
   show (Unary r op s) = show (Reg r) ++ " <- " ++ show op ++ show s
   show Nop = "nop"
   show (Goto l) = "goto " ++ show l
-  show (GotoIf l op) = "goto " ++ show l ++ " if " ++ show op
+  show (GotoIfNot l op) = "goto " ++ show l ++ " if not " ++ show op
