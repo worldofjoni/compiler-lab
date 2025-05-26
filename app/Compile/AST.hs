@@ -8,7 +8,11 @@ type Program = Block
 
 type Block = [Stmt]
 
-data Type = IntType | BoolType
+data Type = IntType | BoolType deriving (Eq)
+
+instance Show Type where
+  show IntType = "int"
+  show BoolType = "bool"
 
 data Stmt
   = SimpStmt Simp
@@ -55,6 +59,7 @@ data Op
   | Neq
   | And
   | Or
+  deriving (Eq)
 
 data UnOp = Neg | Not | BitNot
 
@@ -103,7 +108,6 @@ instance Show Op where
   show Neq = "!="
   show And = "&&"
   show Or = "||"
-  
 
 instance Show UnOp where
   show Neg = "-"
