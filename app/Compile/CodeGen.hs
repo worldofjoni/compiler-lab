@@ -60,32 +60,32 @@ genIStmt (x :<-+ (a, Shl, b)) =
     [ mov (showOperand a) "%eax",
       mov (showOperand b) "%ecx",
       "shl %eax, %ecx",
-      mov "%eax" (showOperand x)
+      mov "%eax" (stackAddress x)
     ]
 genIStmt (x :<-+ (a, Shr, b)) =
   unlines
     [ mov (showOperand a) "%eax",
       mov (showOperand b) "%ecx",
       "sar %eax, %ecx",
-      mov "%eax" (showOperand x)
+      mov "%eax" (stackAddress x)
     ]
 genIStmt (x :<-+ (a, BitOr, b)) =
   unlines
     [ mov (showOperand a) "%eax",
       "or %eax, " ++ showOperand b,
-      mov "%eax" (showOperand x)
+      mov "%eax" (stackAddress x)
     ]
 genIStmt (x :<-+ (a, BitAnd, b)) =
   unlines
     [ mov (showOperand a) "%eax",
       "and %eax, " ++ showOperand b,
-      mov "%eax" (showOperand x)
+      mov "%eax" (stackAddress x)
     ]
 genIStmt (x :<-+ (a, BitXor, b)) =
   unlines
     [ mov (showOperand a) "%eax",
       "xor %eax, " ++ showOperand b,
-      mov "%eax" (showOperand x)
+      mov "%eax" (stackAddress x)
     ]
 genIStmt (Unary reg Neg a) =
   unlines
