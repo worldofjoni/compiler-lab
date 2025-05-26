@@ -14,7 +14,7 @@ genAsm numRegs = unlines . (preamble : {-. (initStack numRegs :)-}) . toList . f
 -- initStack numRegs = "sub" ++ decConst (numRegs * 4) ++ "%rsp" -- move stack pointer
 
 genIStmt :: IStmt -> String
-genIStmt (Return o) = unlines ["cmp " ++ (showOperand o) ++ "$0", "ret"]
+genIStmt (Return o) = unlines [mov (showOperand o) "%eax", "ret"]
 genIStmt (Label l) = unlines [l ++ ":"]
 genIStmt (Goto l) = unlines ["jmp " ++ l]
 genIStmt (GotoIfNot l b) = unlines [mov (showOperand b) "%ecx", "jnz " ++ l]
@@ -92,6 +92,11 @@ genIStmt (Unary reg Neg a) =
     [ mov (showOperand a) "%eax",
       "negl %eax",
       mov "%eax" (stackAddress reg)
+    ]
+genIStmt (Unary x BitNot a) =
+  undefined
+    [
+      
     ]
 
 stackAddress :: VRegister -> String
