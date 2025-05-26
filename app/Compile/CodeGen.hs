@@ -1,8 +1,9 @@
 module Compile.CodeGen (genAsm, genIStmt) where
 
 import Compile.AST (Op (..), UnOp (..))
-import Compile.IR (IR, IStmt (..), Operand (..), VRegister)
+import Compile.IR (IR, IStmt (..), Label, Operand (..), VRegister)
 import Data.Foldable (Foldable (toList))
+import Data.List (unlines)
 
 type Asm = String
 
@@ -13,7 +14,10 @@ genAsm numRegs = unlines . (preamble : {-. (initStack numRegs :)-}) . toList . f
 -- initStack numRegs = "sub" ++ decConst (numRegs * 4) ++ "%rsp" -- move stack pointer
 
 genIStmt :: IStmt -> String
-genIStmt (Return o) = unlines [mov (showOperand o) "%eax", "ret"]
+genIStmt (Return o) = unlines ["cmp " ++ (showOperand o) ++ "$0", "ret"]
+genIStmt (Label l) = unlines [l ++ ":"]
+genIStmt (Goto l) = unlines ["jmp " ++ l]
+genIStmt (GotoIfNot l b) = unlines [mov (showOperand b) "%ecx", "jnz " ++ l]
 genIStmt (x :<- (Imm i)) = mov (decConst i) (stackAddress x)
 genIStmt (x :<- (Reg r)) = unlines [mov (stackAddress r) "%eax", mov "%eax" (stackAddress x)]
 genIStmt (x :<-+ (a, Mul, b)) =
@@ -50,6 +54,38 @@ genIStmt (x :<-+ (a, Sub, b)) =
     [ mov (showOperand a) "%eax",
       "subl " ++ showOperand b ++ ", %eax",
       mov "%eax" (stackAddress x)
+    ]
+genIStmt (x :<-+ (a, Shl, b)) =
+  unlines
+    [ mov (showOperand a) "%eax",
+      mov (showOperand b) "%ecx",
+      "shl %eax, %ecx",
+      mov "%eax" (showOperand x)
+    ]
+genIStmt (x :<-+ (a, Shr, b)) =
+  unlines
+    [ mov (showOperand a) "%eax",
+      mov (showOperand b) "%ecx",
+      "sar %eax, %ecx",
+      mov "%eax" (showOperand x)
+    ]
+genIStmt (x :<-+ (a, BitOr, b)) =
+  unlines
+    [ mov (showOperand a) "%eax",
+      "or %eax, " ++ showOperand b,
+      mov "%eax" (showOperand x)
+    ]
+genIStmt (x :<-+ (a, BitAnd, b)) =
+  unlines
+    [ mov (showOperand a) "%eax",
+      "and %eax, " ++ showOperand b,
+      mov "%eax" (showOperand x)
+    ]
+genIStmt (x :<-+ (a, BitXor, b)) =
+  unlines
+    [ mov (showOperand a) "%eax",
+      "xor %eax, " ++ showOperand b,
+      mov "%eax" (showOperand x)
     ]
 genIStmt (Unary reg Neg a) =
   unlines
