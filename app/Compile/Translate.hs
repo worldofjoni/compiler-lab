@@ -120,6 +120,7 @@ genStmt (While condition body _) = do
   genStmt body
   popLoopEnd ()
   popLoopContinue ()
+  emit $ Goto loopLabel
   emit $ Label endLabel
 genStmt (For initSimp condition after body _) = do
   loopLabel <- freshLabelWithPrefix "loop"
@@ -134,6 +135,7 @@ genStmt (For initSimp condition after body _) = do
   genStmt body
   emit $ Label continueLabel
   maybeGenSimp after
+  emit $ Goto loopLabel
   emit $ Label endLabel
   popLoopContinue ()
   popLoopEnd ()
