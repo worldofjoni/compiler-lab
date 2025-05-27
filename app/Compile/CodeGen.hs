@@ -3,7 +3,6 @@ module Compile.CodeGen (genAsm, genIStmt) where
 import Compile.AST (Op (..), UnOp (..))
 import Compile.IR (IR, IStmt (..), Label, Operand (..), VRegister)
 import Data.Foldable (Foldable (toList))
-import Data.List (unlines)
 
 type Asm = String
 
@@ -17,7 +16,7 @@ genIStmt :: IStmt -> String
 genIStmt (Return o) = unlines [mov (showOperand o) "%eax", "ret"]
 genIStmt (Label l) = unlines [l ++ ":"]
 genIStmt (Goto l) = unlines ["jmp " ++ l]
-genIStmt (GotoIfNot l b) = unlines [mov (showOperand b) "%ecx", "jnz " ++ l]
+genIStmt (GotoIfNot l b) = unlines [mov (showOperand b) "%ecx", "cmpl $0, %ecx", "je " ++ l]
 genIStmt (x :<- (Imm i)) = mov (decConst i) (stackAddress x)
 genIStmt (x :<- (Reg r)) = unlines [mov (stackAddress r) "%eax", mov "%eax" (stackAddress x)]
 genIStmt (x :<-+ (a, Mul, b)) =
@@ -59,14 +58,14 @@ genIStmt (x :<-+ (a, Shl, b)) =
   unlines
     [ mov (showOperand a) "%eax",
       mov (showOperand b) "%ecx",
-      "shl %eax, %ecx",
+      "shl %cl, %eax",
       mov "%eax" (stackAddress x)
     ]
 genIStmt (x :<-+ (a, Shr, b)) =
   unlines
     [ mov (showOperand a) "%eax",
       mov (showOperand b) "%ecx",
-      "sar %eax, %ecx",
+      "sar %cl, %eax",
       mov "%eax" (stackAddress x)
     ]
 genIStmt (Unary reg Neg a) =
@@ -80,25 +79,26 @@ genIStmt (Unary reg Neg a) =
 genIStmt (x :<-+ (a, BitOr, b)) =
   unlines
     [ mov (showOperand a) "%eax",
-      "or %eax, " ++ showOperand b,
+      "or " ++ showOperand b ++ ", %eax",
       mov "%eax" (stackAddress x)
     ]
 genIStmt (x :<-+ (a, BitAnd, b)) =
   unlines
     [ mov (showOperand a) "%eax",
-      "and %eax, " ++ showOperand b,
+      "and " ++ showOperand b ++ ", %eax",
       mov "%eax" (stackAddress x)
     ]
 genIStmt (x :<-+ (a, BitXor, b)) =
   unlines
     [ mov (showOperand a) "%eax",
-      "xor %eax, " ++ showOperand b,
+      "xor " ++ showOperand b ++ ", %eax",
       mov "%eax" (stackAddress x)
     ]
 genIStmt (Unary x BitNot a) =
   unlines
-    [ mov (showOperand a) (stackAddress x),
-      "not " ++ stackAddress x
+    [ mov (showOperand a) "%eax",
+      "not %eax",
+      mov "%eax" (stackAddress x)
     ]
 
 -- comparisons
@@ -106,7 +106,7 @@ genIStmt (x :<-+ (a, Lt, b)) = genCompare "setl" x a b
 genIStmt (x :<-+ (a, Le, b)) = genCompare "setle" x a b
 genIStmt (x :<-+ (a, Eq, b)) = genCompare "sete" x a b
 genIStmt (x :<-+ (a, Neq, b)) = genCompare "setne" x a b
-genIStmt (x :<-+ (a, Ge, b)) = genCompare "setqe" x a b
+genIStmt (x :<-+ (a, Ge, b)) = genCompare "setge" x a b
 genIStmt (x :<-+ (a, Gt, b)) = genCompare "setg" x a b
 
 -- logical
