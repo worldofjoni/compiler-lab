@@ -69,6 +69,14 @@ genIStmt (x :<-+ (a, Shr, b)) =
       "sar %eax, %ecx",
       mov "%eax" (stackAddress x)
     ]
+genIStmt (Unary reg Neg a) =
+  unlines
+    [ mov (showOperand a) "%eax",
+      "negl %eax",
+      mov "%eax" (stackAddress reg)
+    ]
+
+-- bitwise
 genIStmt (x :<-+ (a, BitOr, b)) =
   unlines
     [ mov (showOperand a) "%eax",
@@ -87,16 +95,35 @@ genIStmt (x :<-+ (a, BitXor, b)) =
       "xor %eax, " ++ showOperand b,
       mov "%eax" (stackAddress x)
     ]
-genIStmt (Unary reg Neg a) =
+genIStmt (Unary x BitNot a) =
+  unlines
+    [ mov (showOperand a) (stackAddress x),
+      "not " ++ stackAddress x
+    ]
+
+-- comparisons
+genIStmt (x :<-+ (a, Lt, b)) = genCompare "setl" x a b
+genIStmt (x :<-+ (a, Le, b)) = genCompare "setle" x a b
+genIStmt (x :<-+ (a, Eq, b)) = genCompare "sete" x a b
+genIStmt (x :<-+ (a, Neq, b)) = genCompare "setne" x a b
+genIStmt (x :<-+ (a, Ge, b)) = genCompare "setqe" x a b
+genIStmt (x :<-+ (a, Gt, b)) = genCompare "setg" x a b
+
+-- logical
+genIStmt (x :<-+ (a, And, b)) = genIStmt (x :<-+ (a, BitAnd, b))
+genIStmt (x :<-+ (a, Or, b)) = genIStmt (x :<-+ (a, BitOr, b))
+genIStmt (Unary x Not a) = genIStmt (Unary x BitNot a)
+
+genIStmt Nop = ""
+
+genCompare :: String -> VRegister -> Operand -> Operand -> String
+genCompare setInst x a b =
   unlines
     [ mov (showOperand a) "%eax",
-      "negl %eax",
-      mov "%eax" (stackAddress reg)
-    ]
-genIStmt (Unary x BitNot a) =
-  undefined
-    [
-      
+      "cmpl " ++ showOperand b ++ ", %eax",
+      setInst ++ " %al",
+      "movzbl %al, %eax",
+      mov "%eax" (stackAddress x)
     ]
 
 stackAddress :: VRegister -> String
