@@ -187,6 +187,28 @@ assignTo d (IdentExpr name _) = do
 assignTo d (UnExpr op e) = do
   x <- toOperand e
   emit $ Unary d op x
+assignTo d (BinExpr e1 And e2) = do
+  shortLabel <- freshLabelWithPrefix "short"
+  endLabel <- freshLabelWithPrefix "endshort"
+  x1 <- toOperand e1 
+  emit $ GotoIfNot shortLabel x1
+  x2 <- toOperand e2
+  emit $ d :<- x2
+  emit $ Goto endLabel
+  emit $ Label shortLabel
+  emit $ d :<- Imm 0
+  emit $ Label endLabel
+assignTo d (BinExpr e1 Or e2) = do
+  longLabel <- freshLabelWithPrefix "long"
+  endLabel <- freshLabelWithPrefix "endlong"
+  x1 <- toOperand e1 
+  emit $ GotoIfNot endLabel x1
+  emit $ d :<- Imm 1
+  emit $ Goto endLabel
+  emit $ Label longLabel
+  x2 <- toOperand e2
+  emit $ d :<- x2
+  emit $ Label endLabel
 assignTo d (BinExpr e1 op e2) = do
   x1 <- toOperand e1
   x2 <- toOperand e2
