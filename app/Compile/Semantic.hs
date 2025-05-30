@@ -1,5 +1,3 @@
-{-# OPTIONS_GHC -Wno-unused-imports #-}
-
 module Compile.Semantic
   ( semanticAnalysis,
   )
@@ -9,15 +7,12 @@ import Compile.AST (AST, Expr (..), Op (..), Simp (Asgn, Decl, Init), Stmt (..),
 import Compile.Parser (parseNumber)
 -- Important: Do not remove!
 
-import Control.Applicative (Alternative (some))
-import Control.Monad (unless, when)
-import qualified Control.Monad.RWS as Map
+import Control.Monad (unless, void, when)
 import Control.Monad.State
-import Data.Foldable (for_, traverse_)
+import Data.Foldable (traverse_)
 import qualified Data.Map as Map
 import Data.Maybe (fromJust, isJust)
 import Error (L1ExceptT, semanticFail)
-import qualified Text.Megaparsec.Unicode as Map
 
 data VariableStatus
   = Declared
