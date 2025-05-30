@@ -1,3 +1,5 @@
+{-# LANGUAGE TupleSections #-}
+
 module Compile.Semantic
   ( semanticAnalysis,
   )
@@ -5,13 +7,13 @@ where
 
 import Compile.AST (AST, Expr (..), Op (..), Simp (Asgn, Decl, Init), Stmt (..), Type (BoolType, IntType), UnOp (BitNot, Neg, Not), posPretty)
 import Compile.Parser (parseNumber)
--- Important: Do not remove!
-
-import Control.Monad (unless, void, when)
+import Control.Applicative ((<|>))
+import Control.Monad (unless, when)
 import Control.Monad.State
 import Control.Monad.Trans.Except (catchE)
 import Data.Foldable (traverse_)
 import qualified Data.Map as Map
+import Data.Maybe (isJust)
 import Error (L1ExceptT, semanticFail)
 
 data VariableStatus
@@ -22,7 +24,28 @@ data VariableStatus
 -- You might want to keep track of some location information as well at some point
 type Namespace = Map.Map String (VariableStatus, Type)
 
-type L1Semantic = StateT Namespace L1ExceptT
+newtype SemanticState = SemanticState
+  { namespaces :: [Namespace]
+  }
+
+query :: String -> L1Semantic (Maybe (VariableStatus, Type))
+query name = gets (foldl (\res ns -> res <|> Map.lookup name ns) Nothing . namespaces)
+
+insert :: String -> Type -> VariableStatus -> L1Semantic ()
+insert name ty stat = do
+  s@(SemanticState (n : ns)) <- get
+  put s {namespaces = Map.insert name (stat, ty) n : ns}
+
+markInit :: String -> L1Semantic ()
+markInit name = do
+  s@(SemanticState ns) <- get
+  put
+    s
+      { namespaces =
+          map (Map.update (Just . (Initialized,) . snd) name) ns
+      }
+
+type L1Semantic = StateT SemanticState L1ExceptT
 
 -- A little wrapper so we don't have to ($ lift) everywhere inside the StateT
 semanticFail' :: String -> L1Semantic a
@@ -34,14 +57,15 @@ semanticAnalysis ast = do
   evalStateT (checkReturns ast) ns
 
 -- right now an AST is just a list of statements
-varStatusAnalysis :: AST -> L1ExceptT Namespace
+varStatusAnalysis :: AST -> L1ExceptT SemanticState
 varStatusAnalysis stmts = do
-  execStateT (mapM_ checkStmt stmts) Map.empty
+  execStateT (mapM_ checkStmt stmts) $ SemanticState $ pure Map.empty
 
 subscope :: L1Semantic () -> L1Semantic ()
 subscope action = do
-  ns <- get
-  void $ lift $ execStateT action ns
+  modify (\s -> s {namespaces = Map.empty : namespaces s})
+  action
+  modify (\s -> s {namespaces = tail $ namespaces s})
 
 -- So far this checks:
 -- + we cannot declare a variable again that has already been declared or initialized
@@ -70,23 +94,21 @@ checkStmt (Continue _) = pure ()
 
 checkSimp :: Simp -> L1Semantic ()
 checkSimp (Decl ty name pos) = do
-  ns <- get
-  let isDeclared = Map.member name ns
+  isDeclared <- isJust <$> query name
   when isDeclared $
     semanticFail' $
       "Variable " ++ name ++ " redeclared at: " ++ posPretty pos
-  put $ Map.insert name (Declared, ty) ns
+  insert name ty Declared
 checkSimp (Init ty name e pos) = do
-  ns <- get
-  let isDeclared = Map.member name ns
+  isDeclared <- isJust <$> query name
   when isDeclared $
     semanticFail' $
       "Variable " ++ name ++ " redeclared (initialized) at: " ++ posPretty pos
   checkExpr ty e
-  put $ Map.insert name (Initialized, ty) ns
+  insert name ty Initialized
 checkSimp (Asgn name op e pos) = do
-  ns <- get
-  case Map.lookup name ns of
+  val <- query name
+  case val of
     Nothing ->
       semanticFail' $
         "Trying to assign to undeclared variable "
@@ -98,7 +120,7 @@ checkSimp (Asgn name op e pos) = do
         -- Assignment with `=`
         -- If we assign to a variable with `=`, it has to be either declared or initialized
         checkExpr ty e
-        put $ Map.insert name (Initialized, ty) ns
+        markInit name
       Just _ -> do
         -- Assinging with op, e.g. `x += 3`,
         -- for this x needs to be intialized, not just declasred
@@ -128,8 +150,8 @@ checkExpr IntType (IntExpr str pos) = do
     Right _ -> return ()
 checkExpr ty (IntExpr _ pos) = semanticFail' $ "Expected " ++ show ty ++ " but got integer at: " ++ posPretty pos
 checkExpr ty (IdentExpr name pos) = do
-  ns <- get
-  case Map.lookup name ns of
+  val <- query name
+  case val of
     Just (Initialized, ty2) | ty2 == ty -> return ()
     Just (_, ty2) -> semanticFail' $ "Expected " ++ show ty ++ " got " ++ show ty2 ++ " at: " ++ posPretty pos
     _ ->
