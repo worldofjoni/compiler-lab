@@ -29,6 +29,10 @@ data Simp
   | Init Type String Expr SourcePos
   | Asgn String AsgnOp Expr SourcePos
 
+isDecl :: Simp -> Bool
+isDecl (Asgn {}) = False
+isDecl _ = True
+
 data Expr
   = IntExpr String SourcePos
   | BoolExpr Bool SourcePos

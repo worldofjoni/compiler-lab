@@ -5,7 +5,7 @@ module Compile.Semantic
   )
 where
 
-import Compile.AST (AST, Expr (..), Op (..), Simp (Asgn, Decl, Init), Stmt (..), Type (BoolType, IntType), UnOp (BitNot, Neg, Not), posPretty)
+import Compile.AST (AST, Expr (..), Op (..), Simp (Asgn, Decl, Init), Stmt (..), Type (BoolType, IntType), UnOp (BitNot, Neg, Not), isDecl, posPretty)
 import Compile.Parser (parseNumber)
 import Control.Applicative ((<|>))
 import Control.Monad (unless, when)
@@ -84,10 +84,10 @@ checkStmt (If i t e _) = do
 checkStmt (While c s _) = subscope $ do
   checkExpr BoolType c
   checkStmt s
-checkStmt (For init_ e' s s' _) = subscope $ do
+checkStmt (For init_ e' step s' p) = subscope $ do
   traverse_ checkSimp init_
   checkExpr BoolType e'
-  traverse_ checkSimp s
+  traverse_ (\step' -> when (isDecl step') $ semanticFail' ("Step statement must not be a declatation at: " ++ posPretty p) >> checkSimp step') step
   checkStmt s'
 checkStmt (Break _) = pure ()
 checkStmt (Continue _) = pure ()
