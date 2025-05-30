@@ -11,13 +11,12 @@ import Control.Monad (unless, void, when)
 import Control.Monad.State
 import Data.Foldable (traverse_)
 import qualified Data.Map as Map
-import Data.Maybe (fromJust, isJust)
 import Error (L1ExceptT, semanticFail)
 
 data VariableStatus
   = Declared
   | Initialized
-  deriving (Show)
+  deriving (Show, Eq)
 
 -- You might want to keep track of some location information as well at some point
 type Namespace = Map.Map String (VariableStatus, Type)
@@ -38,6 +37,11 @@ varStatusAnalysis :: AST -> L1ExceptT Namespace
 varStatusAnalysis stmts = do
   execStateT (mapM_ checkStmt stmts) Map.empty
 
+subscope :: L1Semantic () -> L1Semantic ()
+subscope action = do
+  ns <- get
+  void $ lift $ execStateT action ns
+
 -- So far this checks:
 -- + we cannot declare a variable again that has already been declared or initialized
 -- + we cannot initialize a variable again that has already been declared or initialized
@@ -48,10 +52,10 @@ checkStmt (Ret e _) = checkExpr IntType e
 checkStmt (SimpStmt s) = checkSimp s
 checkStmt (BlockStmt b _) =
   subscope $ mapM_ checkStmt b
-checkStmt (If i t e _) = subscope $ do
+checkStmt (If i t e _) = do
   checkExpr BoolType i
-  checkStmt t
-  mapM_ checkStmt e
+  subscope $ checkStmt t
+  subscope $ mapM_ checkStmt e
 checkStmt (While c s _) = subscope $ do
   checkExpr BoolType c
   checkStmt s
@@ -63,8 +67,7 @@ checkStmt (For init_ e' s s' _) = subscope $ do
 checkStmt (Break _) = pure ()
 checkStmt (Continue _) = pure ()
 
-subscope :: L1Semantic a -> L1Semantic ()
-subscope = void . gets . execStateT
+
 
 checkSimp :: Simp -> L1Semantic ()
 checkSimp (Decl ty name pos) = do
@@ -84,33 +87,37 @@ checkSimp (Init ty name e pos) = do
   put $ Map.insert name (Initialized, ty) ns
 checkSimp (Asgn name op e pos) = do
   ns <- get
-  case op of
-    Nothing -> do
-      -- Assignment with `=`
-      -- If we assign to a variable with `=`, it has to be either declared or initialized
-      let varEntry = Map.lookup name ns
-      unless (isJust varEntry) $
-        semanticFail' $
-          "Trying to assign to undeclared variable "
-            ++ name
-            ++ " at: "
-            ++ posPretty pos
-      let ty = snd $ fromJust varEntry
-      checkExpr ty e
-      put $ Map.insert name (Initialized, ty) ns
-    Just _ ->
-      -- Assinging with op, e.g. `x += 3`,
-      -- for this x needs to be intialized, not just declasred
-      case Map.lookup name ns of
-        Just (Initialized, IntType) -> do
-          checkExpr IntType e
-        Just (Initialized, _) -> semanticFail' $ "Expected target variable to be of type int at: " ++ posPretty pos
-        _ ->
+  case Map.lookup name ns of
+    Nothing ->
+      semanticFail' $
+        "Trying to assign to undeclared variable "
+          ++ name
+          ++ " at: "
+          ++ posPretty pos
+    Just (ini, ty) -> case op of
+      Nothing -> do
+        -- Assignment with `=`
+        -- If we assign to a variable with `=`, it has to be either declared or initialized
+        checkExpr ty e
+        put $ Map.insert name (Initialized, ty) ns
+      Just _ -> do
+        -- Assinging with op, e.g. `x += 3`,
+        -- for this x needs to be intialized, not just declasred
+        unless (ini == Initialized) $
           semanticFail' $
             "Trying to assignOp to undeclared variable "
               ++ name
               ++ " at: "
-              ++ posPretty pos
+              ++ posPretty
+                pos
+        unless (ty == IntType) $
+          semanticFail' $
+            "Trying to assignOp to undeclared variable "
+              ++ name
+              ++ " at: "
+              ++ posPretty
+                pos
+        checkExpr IntType e
 
 checkExpr :: Type -> Expr -> L1Semantic ()
 checkExpr IntType (IntExpr str pos) = do
