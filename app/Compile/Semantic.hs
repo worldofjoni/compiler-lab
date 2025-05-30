@@ -8,7 +8,7 @@ where
 import Compile.AST (AST, Expr (..), Op (..), Simp (Asgn, Decl, Init), Stmt (..), Type (BoolType, IntType), UnOp (BitNot, Neg, Not), isDecl, posPretty)
 import Compile.Parser (parseNumber)
 import Control.Applicative ((<|>))
-import Control.Monad (unless, when)
+import Control.Monad (unless, void, when)
 import Control.Monad.State
 import Control.Monad.Trans.Except (catchE)
 import Data.Foldable (traverse_)
@@ -67,6 +67,12 @@ subscope action = do
   action
   modify (\s -> s {namespaces = tail $ namespaces s})
 
+-- variables are not rembembered to be initialized (maybe do with separate analysis later)
+optSubscope :: L1Semantic () -> L1Semantic ()
+optSubscope action = do
+  st <- get
+  void . lift . execStateT action $ st
+
 -- So far this checks:
 -- + we cannot declare a variable again that has already been declared or initialized
 -- + we cannot initialize a variable again that has already been declared or initialized
@@ -79,16 +85,17 @@ checkStmt (BlockStmt b _) =
   subscope $ mapM_ checkStmt b
 checkStmt (If i t e _) = do
   checkExpr BoolType i
-  subscope $ checkStmt t
-  subscope $ mapM_ checkStmt e
-checkStmt (While c s _) = subscope $ do
+  optSubscope $ checkStmt t
+  optSubscope $ mapM_ checkStmt e
+checkStmt (While c s _) = optSubscope $ do
   checkExpr BoolType c
   checkStmt s
 checkStmt (For init_ e' step s' p) = subscope $ do
   traverse_ checkSimp init_
-  checkExpr BoolType e'
-  traverse_ (\step' -> when (isDecl step') $ semanticFail' ("Step statement must not be a declatation at: " ++ posPretty p) >> checkSimp step') step
-  checkStmt s'
+  optSubscope $ do
+    checkExpr BoolType e'
+    traverse_ (\step' -> when (isDecl step') $ semanticFail' ("Step statement must not be a declatation at: " ++ posPretty p) >> checkSimp step') step
+    checkStmt s'
 checkStmt (Break _) = pure ()
 checkStmt (Continue _) = pure ()
 
