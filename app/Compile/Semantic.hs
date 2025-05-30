@@ -9,6 +9,7 @@ import Compile.Parser (parseNumber)
 
 import Control.Monad (unless, void, when)
 import Control.Monad.State
+import Control.Monad.Trans.Except (catchE)
 import Data.Foldable (traverse_)
 import qualified Data.Map as Map
 import Error (L1ExceptT, semanticFail)
@@ -66,8 +67,6 @@ checkStmt (For init_ e' s s' _) = subscope $ do
   checkStmt s'
 checkStmt (Break _) = pure ()
 checkStmt (Continue _) = pure ()
-
-
 
 checkSimp :: Simp -> L1Semantic ()
 checkSimp (Decl ty name pos) = do
@@ -144,12 +143,31 @@ checkExpr IntType (UnExpr BitNot e) = checkExpr IntType e
 checkExpr BoolType (UnExpr Not e) = checkExpr BoolType e
 checkExpr ty (UnExpr op _) = semanticFail' $ show op ++ " does not produce an " ++ show ty
 checkExpr BoolType (BinExpr lhs op rhs) = do
-  if op `elem` intToBoolOp
-    then checkExpr IntType lhs >> checkExpr IntType rhs
-    else
-      if op `elem` boolToBoolOp
-        then checkExpr BoolType lhs >> checkExpr BoolType rhs
-        else semanticFail' $ show op ++ " does not produce an bool"
+  ns <- get
+  lift $
+    catchE
+      (int ns)
+      ( \e1 ->
+          catchE
+            (bool ns)
+            ( \e2 ->
+                if op `elem` boolToBoolOp ++ intToBoolOp
+                  then fail $ "Operator " ++ show op ++ " does neigher accept int nor bool:\n" ++ show e1 ++ "\n" ++ show e2
+                  else failOp
+            )
+      )
+  where
+    int =
+      evalStateT $
+        when (op `elem` intToBoolOp) $
+          checkExpr IntType lhs >> checkExpr IntType rhs
+    bool =
+      evalStateT $
+        when (op `elem` boolToBoolOp) $
+          checkExpr BoolType lhs >> checkExpr BoolType rhs
+    failOp =
+      semanticFail $
+        "Operator " ++ show op ++ " does not produce an bool."
 checkExpr IntType (BinExpr lhs op rhs)
   | op `elem` intToIntOp = checkExpr IntType lhs >> checkExpr IntType rhs
   | otherwise = semanticFail' $ "Operator " ++ show op ++ "does not produce an integer."
