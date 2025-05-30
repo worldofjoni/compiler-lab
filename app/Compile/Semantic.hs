@@ -13,6 +13,7 @@ import Control.Applicative (Alternative (some))
 import Control.Monad (unless, when)
 import qualified Control.Monad.RWS as Map
 import Control.Monad.State
+import Data.Foldable (for_, traverse_)
 import qualified Data.Map as Map
 import Data.Maybe (fromJust, isJust)
 import Error (L1ExceptT, semanticFail)
@@ -50,19 +51,25 @@ varStatusAnalysis stmts = do
 checkStmt :: Stmt -> L1Semantic ()
 checkStmt (Ret e _) = checkExpr IntType e
 checkStmt (SimpStmt s) = checkSimp s
-checkStmt (BlockStmt b _) = mapM_ checkStmt b
-checkStmt (If i t e _) = do
+checkStmt (BlockStmt b _) =
+  subscope $ mapM_ checkStmt b
+checkStmt (If i t e _) = subscope $ do
   checkExpr BoolType i
   checkStmt t
   mapM_ checkStmt e
-checkStmt (While c s _) = do
+checkStmt (While c s _) = subscope $ do
   checkExpr BoolType c
   checkStmt s
-checkStmt (For (Just (Init ty name e _)) e' s s' _) = undefined
-checkStmt (For (Just (Decl ty name _)) e' s s' _) = undefined
-checkStmt (For s1 e' s2 s3 _) = undefined
+checkStmt (For init_ e' s s' _) = subscope $ do
+  traverse_ checkSimp init_
+  checkExpr BoolType e'
+  traverse_ checkSimp s
+  checkStmt s'
 checkStmt (Break _) = pure ()
 checkStmt (Continue _) = pure ()
+
+subscope :: L1Semantic a -> L1Semantic ()
+subscope = void . gets . execStateT
 
 checkSimp :: Simp -> L1Semantic ()
 checkSimp (Decl ty name pos) = do
