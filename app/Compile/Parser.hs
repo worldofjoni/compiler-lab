@@ -179,8 +179,8 @@ opTable =
     [infix_ Lt "<", infix_ Gt ">", infix_ Le "<=", infix_ Ge ">="],
     [infix_ Eq "==", infix_ Neq "!="],
     [infix_ BitAnd "&"],
-    [infix_ BitOr "|"],
     [infix_ BitXor "^"],
+    [infix_ BitOr "|"],
     [infix_ And "&&"],
     [infix_ Or "||"],
     [TernR (Ternary <$ symbol ":" <$ symbol "?")] -- reversed order
