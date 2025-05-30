@@ -132,7 +132,7 @@ checkExpr ty (IdentExpr name pos) = do
           ++ posPretty pos
 checkExpr IntType (UnExpr Neg e) = checkExpr IntType e
 checkExpr IntType (UnExpr BitNot e) = checkExpr IntType e
-checkExpr IntType (UnExpr Not e) = checkExpr BoolType e
+checkExpr BoolType (UnExpr Not e) = checkExpr BoolType e
 checkExpr ty (UnExpr op _) = semanticFail' $ show op ++ " does not produce an " ++ show ty
 checkExpr BoolType (BinExpr lhs op rhs) = do
   if op `elem` intToBoolOp
