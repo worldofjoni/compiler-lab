@@ -152,8 +152,9 @@ checkExpr ty (IntExpr _ pos) = semanticFail' $ "Expected " ++ show ty ++ " but g
 checkExpr ty (IdentExpr name pos) = do
   val <- query name
   case val of
-    Just (Initialized, ty2) | ty2 == ty -> return ()
-    Just (_, ty2) -> semanticFail' $ "Expected " ++ show ty ++ " got " ++ show ty2 ++ " at: " ++ posPretty pos
+    Just (Initialized, ty2)
+      | ty2 == ty -> return ()
+      | otherwise -> semanticFail' $ "Expected " ++ show ty ++ " got " ++ show ty2 ++ " at: " ++ posPretty pos
     _ ->
       semanticFail' $
         "Variable "
