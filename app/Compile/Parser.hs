@@ -185,7 +185,7 @@ opTable =
     [infix_ BitXor "^"],
     [infix_ And "&&"],
     [infix_ Or "||"],
-    [TernR (Ternary <$ symbol "?" <$ symbol ":")]
+    [TernR (Ternary <$ symbol ":" <$ symbol "?")] -- reversed order
   ]
   where
     -- this allows us to parse `---x` as `-(-(-x))`
