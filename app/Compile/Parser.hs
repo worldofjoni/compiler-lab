@@ -40,6 +40,7 @@ astParser = do
   reserved "main"
   parens $ pure ()
   BlockStmt block _ <- parseBlock
+  eof
   return block
 
 parseType :: Parser Type
