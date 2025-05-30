@@ -47,15 +47,17 @@ parseType = IntType <$ reserved "int" <|> BoolType <$ reserved "bool" <?> "type"
 
 stmt :: Parser Stmt
 stmt =
-  SimpStmt
-    <$> (simp <* semi)
-      <|> parseBlock
-      <|> parseIf
-      <|> parseWhile
-      <|> parseFor
-      <|> parseContinue
-      <|> parseBreak
-      <|> ret
+  ( SimpStmt
+      <$> simp
+      <* semi
+  )
+    <|> parseBlock
+    <|> parseIf
+    <|> parseWhile
+    <|> parseFor
+    <|> parseContinue
+    <|> parseBreak
+    <|> ret
 
 parseBlock :: Parser Stmt
 parseBlock = do
@@ -98,23 +100,19 @@ parseBreak = do
   Break <$ reserved "break" <* semi <*> return pos
 
 simp :: Parser Simp
-simp = asign <|> try declInit <|> try declNoInit
+simp = asign <|> decl
 
-declNoInit :: Parser Simp
-declNoInit = do
+decl :: Parser Simp
+decl = do
   pos <- getSourcePos
   type_ <- parseType
   name <- identifier
-  return $ Decl type_ name pos
-
-declInit :: Parser Simp
-declInit = do
-  pos <- getSourcePos
-  type_ <- parseType
-  name <- identifier
-  void $ symbol "="
-  e <- expr
-  return $ Init type_ name e pos
+  maybeInit <- optional $ do
+    void $ symbol "="
+    expr
+  return $ case maybeInit of
+    Just e -> Init type_ name e pos
+    Nothing -> Decl type_ name pos
 
 asign :: Parser Simp
 asign = do
@@ -191,7 +189,8 @@ opTable =
     -- this allows us to parse `---x` as `-(-(-x))`
     -- makeExprParser doesn't do this by default
     manyUnaryOp op sym = Prefix $ foldr1 (.) <$> some (UnExpr op <$ symbol sym)
-    infix_ op sym = InfixL (flip BinExpr op <$ symbol sym)
+    infix_ op sym = InfixL (flip BinExpr op <$ prefixSymbol sym)
+    prefixSymbol n = (lexeme . try) (string n <* notFollowedBy opLetter)
 
 expr :: Parser Expr
 expr = makeExprParser expr' opTable <?> "expression"
