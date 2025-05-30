@@ -152,7 +152,7 @@ checkExpr BoolType (BinExpr lhs op rhs) = do
             (bool ns)
             ( \e2 ->
                 if op `elem` boolToBoolOp ++ intToBoolOp
-                  then fail $ "Operator " ++ show op ++ " does neigher accept int nor bool:\n" ++ show e1 ++ "\n" ++ show e2
+                  then semanticFail $ "Operator " ++ show op ++ " does neigher accept int nor bool:\n" ++ show e1 ++ "\n" ++ show e2
                   else failOp
             )
       )
