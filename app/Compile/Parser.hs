@@ -152,7 +152,7 @@ ret = do
   return $ Ret e pos
 
 expr' :: Parser Expr
-expr' = parens expr <|> intExpr <|> boolExpr <|> identExpr
+expr' = parens expr <|> identExpr <|> intExpr <|> boolExpr
 
 intExpr :: Parser Expr
 intExpr = do
