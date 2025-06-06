@@ -110,8 +110,8 @@ genIStmt (x :<-+ (a, Ge, b)) = genCompare "setge" x a b
 genIStmt (x :<-+ (a, Gt, b)) = genCompare "setg" x a b
 
 -- logical
-genIStmt (x :<-+ (a, And, b)) = genIStmt (x :<-+ (a, BitAnd, b))
-genIStmt (x :<-+ (a, Or, b)) = genIStmt (x :<-+ (a, BitOr, b))
+genIStmt (_ :<-+ (_, And, _)) = error "logical and should have been eliminated by translate"
+genIStmt (_ :<-+ (_, Or, _)) = error "logical and should have been eliminated by translate"
 genIStmt (Unary x Not a) = genIStmt (Unary x BitNot a)
 
 genIStmt Nop = ""
