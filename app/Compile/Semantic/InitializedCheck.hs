@@ -14,6 +14,7 @@ import Data.Set as Set
     (\\),
   )
 import Error (L1ExceptT, semanticFail)
+import Text.Megaparsec (SourcePos)
 
 type Initialized = Set String
 
@@ -37,8 +38,10 @@ defineFrom is = modify (\r -> r {initialized = Set.union is (initialized r)})
 defineAll :: L1InitCheck ()
 defineAll = modify (\r -> r {initialized = foldl Set.union Set.empty (scopes r)})
 
-checkDefined :: String -> L1InitCheck Bool
-checkDefined name = gets (Set.member name . initialized)
+assertDefined :: String -> SourcePos -> L1InitCheck ()
+assertDefined name pos = do
+  defined <- gets (Set.member name . initialized)
+  unless defined $ semanticFail' $ "Variable " ++ name ++ " is uninitialized at " ++ posPretty pos
 
 tryInitialized :: L1InitCheck () -> L1InitCheck Initialized
 tryInitialized action = do
@@ -109,14 +112,12 @@ checkSimp :: Simp -> L1InitCheck ()
 checkSimp (Decl _ name _) = declare name
 checkSimp (Init _ name e _) = checkExpr e >> declare name >> define name
 checkSimp (Asgn target Nothing expr _) = checkExpr expr >> define target
-checkSimp (Asgn target (Just _) expr _) = checkDefined target >> checkExpr expr
+checkSimp (Asgn target (Just _) expr pos) = assertDefined target pos >> checkExpr expr
 
 checkExpr :: Expr -> L1InitCheck ()
 checkExpr (IntExpr _ _) = pure ()
 checkExpr (BoolExpr _ _) = pure ()
-checkExpr (IdentExpr name pos) = do
-  defined <- checkDefined name
-  unless defined $ semanticFail' $ "Variable " ++ name ++ " is uninitialized at " ++ posPretty pos
+checkExpr (IdentExpr name pos) = assertDefined name pos
 checkExpr (BinExpr e1 _ e2) = checkExpr e1 >> checkExpr e2
 checkExpr (UnExpr _ e) = checkExpr e
 checkExpr (Ternary a b c) = checkExpr a >> checkExpr b >> checkExpr c
