@@ -27,8 +27,10 @@ defineAll :: L1InitCheck ()
 defineAll = modify (\r -> r {allInit = True})
 
 intersectState :: InitState -> InitState -> InitState
-intersectState (InitState i1 r1 e1) (InitState i2 r2 _) =
-  InitState (Set.intersection i1 i2) (r1 && r2) e1
+intersectState (InitState i1 r1 e1) (InitState i2 r2 _)
+  | r1 = InitState i2 r2 e1
+  | r2 = InitState i1 r1 e1
+  | otherwise = InitState (Set.intersection i1 i2) False e1
 
 checkDefined :: String -> L1InitCheck Bool
 checkDefined name = do
