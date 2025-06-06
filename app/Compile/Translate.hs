@@ -7,6 +7,7 @@ import Compile.AST
 import Compile.IR
 import Control.Monad.State
 import qualified Data.Map as Map
+import Options.Applicative (long)
 
 type VarName = String
 
@@ -202,7 +203,7 @@ assignTo d (BinExpr e1 Or e2) = do
   longLabel <- freshLabelWithPrefix "long"
   endLabel <- freshLabelWithPrefix "endlong"
   x1 <- toOperand e1 
-  emit $ GotoIfNot endLabel x1
+  emit $ GotoIfNot longLabel x1
   emit $ d :<- Imm 1
   emit $ Goto endLabel
   emit $ Label longLabel
