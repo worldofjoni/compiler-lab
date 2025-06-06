@@ -5,6 +5,7 @@ module Compile.Parser
 where
 
 import Compile.AST (AST, Expr (..), Op (..), Simp (Asgn, Decl, Init), Stmt (..), Type (BoolType, IntType), UnOp (..))
+import Control.Applicative (asum)
 import Control.Monad.Combinators.Expr
 import Control.Monad.IO.Class (liftIO)
 import Data.Char (isAlpha, isAscii, isDigit)
@@ -173,7 +174,7 @@ identExpr = do
 
 opTable :: [[Operator Parser Expr]]
 opTable =
-  [ [manyUnaryOp Neg "-", manyUnaryOp Not "!", manyUnaryOp BitNot "~"],
+  [ [manyUnaryOp [(Neg, "-"), (Not, "!"), (BitNot, "~")]],
     [infix_ Mul "*", infix_ Div "/", infix_ Mod "%"],
     [infix_ Add "+", infix_ Sub "-"],
     [infix_ Shl "<<", infix_ Shr ">>"],
@@ -189,7 +190,7 @@ opTable =
   where
     -- this allows us to parse `---x` as `-(-(-x))`
     -- makeExprParser doesn't do this by default
-    manyUnaryOp op sym = Prefix $ foldr1 (.) <$> some (UnExpr op <$ symbol sym)
+    manyUnaryOp opsyms = Prefix $ foldr1 (.) <$> some (asum . map (\(op, sym) -> UnExpr op <$ symbol sym) $ opsyms)
     infix_ op sym = InfixL (flip BinExpr op <$ prefixSymbol sym)
     prefixSymbol n = (lexeme . try) (string n <* notFollowedBy opLetter)
 
