@@ -1,13 +1,15 @@
 module Compile.Semantic.ReturnCheck (checkReturns) where
 
-import Compile.AST (AST, Stmt (Ret))
+import Compile.AST 
 import Control.Monad (unless)
 import Error (L1ExceptT, semanticFail)
 
 checkReturns :: AST -> L1ExceptT ()
 checkReturns stmts = do
-  let returns = any isReturn stmts
-  unless returns $ semanticFail "Program does not return"
-  where
-    isReturn (Ret _ _) = True
-    isReturn _ = False
+  unless (any returns stmts) $ semanticFail "Program does not return"
+
+returns:: Stmt -> Bool
+returns (Ret _ _) = True
+returns (If _ thenStmt (Just elseStmt) _) = returns thenStmt && returns elseStmt
+returns (BlockStmt (x:xs) sourcePos) = returns x && returns (BlockStmt xs sourcePos)
+returns _ = False
