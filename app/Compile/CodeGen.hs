@@ -109,7 +109,12 @@ genIStmt (x :<-+ (a, Gt, b)) = genCompare "setg" x a b
 -- logical
 genIStmt (_ :<-+ (_, And, _)) = error "logical and should have been eliminated by translate"
 genIStmt (_ :<-+ (_, Or, _)) = error "logical and should have been eliminated by translate"
-genIStmt (Unary x Not a) = genIStmt (Unary x BitNot a)
+genIStmt (Unary x Not a) =
+  unlines
+    [ mov (showOperand a) "%eax",
+      "xor $1, %eax",
+      mov "%eax" (stackAddress x)
+    ]
 genIStmt Nop = ""
 
 genCompare :: String -> VRegister -> Operand -> Operand -> String
