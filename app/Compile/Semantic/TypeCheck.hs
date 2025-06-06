@@ -2,7 +2,7 @@ module Compile.Semantic.TypeCheck (varStatusAnalysis) where
 
 import Compile.AST (AST, Expr (..), Op (..), Simp (Asgn, Decl, Init), Stmt (..), Type (BoolType, IntType), UnOp (BitNot, Neg, Not), isDecl, posPretty)
 import Compile.Parser (parseNumber)
-import Control.Monad (void, when)
+import Control.Monad (unless, void, when)
 import Control.Monad.State
 import Control.Monad.Trans.Except (catchE)
 import Data.Foldable (traverse_)
@@ -17,10 +17,10 @@ data VariableStatus
 -- You might want to keep track of some location information as well at some point
 type Namespace = Map.Map String Type
 
-type L1Semantic = StateT Namespace L1ExceptT
+type L1TypeCheck = StateT Namespace L1ExceptT
 
 -- A little wrapper so we don't have to ($ lift) everywhere inside the StateT
-semanticFail' :: String -> L1Semantic a
+semanticFail' :: String -> L1TypeCheck a
 semanticFail' = lift . semanticFail
 
 -- right now an AST is just a list of statements
@@ -28,12 +28,12 @@ varStatusAnalysis :: AST -> L1ExceptT Namespace
 varStatusAnalysis stmts = do
   execStateT (mapM_ checkStmt stmts) Map.empty
 
-subscope :: L1Semantic () -> L1Semantic ()
+subscope :: L1TypeCheck () -> L1TypeCheck ()
 subscope action = do
   ns <- get
   void . lift . runStateT action $ ns
 
-declare :: String -> Type -> L1Semantic ()
+declare :: String -> Type -> L1TypeCheck ()
 declare name ty = modify (Map.insert name ty)
 
 -- So far this checks:
@@ -41,7 +41,7 @@ declare name ty = modify (Map.insert name ty)
 -- + we cannot initialize a variable again that has already been declared or initialized
 -- + a variable needs to be declared or initialized before we can assign to it
 -- + we can only return valid expressions
-checkStmt :: Stmt -> L1Semantic ()
+checkStmt :: Stmt -> L1TypeCheck ()
 checkStmt (Ret e _) = checkExpr IntType e
 checkStmt (SimpStmt s) = checkSimp s
 checkStmt (BlockStmt b _) =
@@ -62,7 +62,7 @@ checkStmt (For init_ e' step s' p) = subscope $ do
 checkStmt (Break _) = pure ()
 checkStmt (Continue _) = pure ()
 
-checkSimp :: Simp -> L1Semantic ()
+checkSimp :: Simp -> L1TypeCheck ()
 checkSimp (Decl ty name pos) = do
   isDeclared <- gets (Map.member name)
   when isDeclared $
@@ -88,7 +88,7 @@ checkSimp (Asgn name _ e pos) = do
     Just ty ->
       checkExpr ty e
 
-checkExpr :: Type -> Expr -> L1Semantic ()
+checkExpr :: Type -> Expr -> L1TypeCheck ()
 checkExpr IntType (IntExpr str pos) = do
   -- Check that literals are in bounds
   let res = parseNumber str
@@ -129,19 +129,20 @@ checkExpr BoolType (BinExpr lhs op rhs) = do
       )
   where
     int =
-      evalStateT $
-        when (op `elem` intToBoolOp) $
-          checkExpr IntType lhs >> checkExpr IntType rhs
+      evalStateT $ do
+        unless (op `elem` intToBoolOp) $ semanticFail' ""
+        checkExpr IntType lhs
+        checkExpr IntType rhs
     bool =
-      evalStateT $
-        when (op `elem` boolToBoolOp) $
-          checkExpr BoolType lhs >> checkExpr BoolType rhs
+      evalStateT $ do
+        unless (op `elem` boolToBoolOp) $ semanticFail' ""
+        checkExpr BoolType lhs >> checkExpr BoolType rhs
     failOp =
       semanticFail $
         "Operator " ++ show op ++ " does not produce an bool."
 checkExpr IntType (BinExpr lhs op rhs)
   | op `elem` intToIntOp = checkExpr IntType lhs >> checkExpr IntType rhs
-  | otherwise = semanticFail' $ "Operator " ++ show op ++ "does not produce an integer."
+  | otherwise = semanticFail' $ "Operator " ++ show op ++ " does not produce an integer."
 checkExpr BoolType (BoolExpr _ _) = pure ()
 checkExpr ty (BoolExpr _ _) = semanticFail' $ "expected " ++ show ty ++ " got bool"
 checkExpr ty (Ternary a b c) = do
