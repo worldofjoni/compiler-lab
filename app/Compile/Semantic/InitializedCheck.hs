@@ -5,42 +5,58 @@ import Control.Monad (unless, void)
 import Control.Monad.State
 import Data.Foldable (traverse_)
 import Data.Set as Set
+  ( Set,
+    empty,
+    insert,
+    intersection,
+    member,
+    union,
+    (\\),
+  )
 import Error (L1ExceptT, semanticFail)
 
 type Initialized = Set String
 
 data InitState = InitState
-  { initialized :: Initialized,
-    allInit :: Bool,
+  { scopes :: [Set String],
+    initialized :: Initialized,
     step :: Maybe Simp
   }
+
+newState :: InitState
+newState = InitState {initialized = Set.empty, step = Nothing, scopes = [Set.empty]}
 
 type L1InitCheck = StateT InitState L1ExceptT
 
 define :: String -> L1InitCheck ()
 define name = modify (\r -> r {initialized = Set.insert name . initialized $ r})
 
-defineFrom :: InitState -> L1InitCheck ()
-defineFrom is = modify (\r -> r {allInit = allInit is, initialized = Set.union (initialized is) (initialized r)})
+defineFrom :: Initialized -> L1InitCheck ()
+defineFrom is = modify (\r -> r {initialized = Set.union is (initialized r)})
 
 defineAll :: L1InitCheck ()
-defineAll = modify (\r -> r {allInit = True})
-
-intersectState :: InitState -> InitState -> InitState
-intersectState (InitState i1 r1 e1) (InitState i2 r2 _)
-  | r1 = InitState i2 r2 e1
-  | r2 = InitState i1 r1 e1
-  | otherwise = InitState (Set.intersection i1 i2) False e1
+defineAll = modify (\r -> r {initialized = foldl Set.union Set.empty (scopes r)})
 
 checkDefined :: String -> L1InitCheck Bool
-checkDefined name = do
-  allInitialized <- gets allInit
-  if allInitialized then pure True else gets (Set.member name . initialized)
+checkDefined name = gets (Set.member name . initialized)
 
-subscope :: L1InitCheck () -> L1InitCheck InitState
-subscope action = do
+tryInitialized :: L1InitCheck () -> L1InitCheck Initialized
+tryInitialized action = do
   s <- get
-  lift . execStateT action $ s
+  initialized <$> (lift . execStateT action $ s)
+
+declare :: String -> L1InitCheck ()
+declare name = modify (\r -> r {scopes = update (scopes r)})
+  where
+    update (s : ss) = Set.insert name s : ss
+    update [] = error "no scope yet.."
+
+scope :: L1InitCheck () -> L1InitCheck ()
+scope action = do
+  modify (\r -> r {scopes = Set.empty : scopes r})
+  action
+  s <- gets (head . scopes)
+  modify (\r -> r {initialized = initialized r \\ s, scopes = tail (scopes r)})
 
 loopScope :: Simp -> L1InitCheck () -> L1InitCheck ()
 loopScope e action = do
@@ -57,31 +73,31 @@ semanticFail' :: String -> L1InitCheck a
 semanticFail' = lift . semanticFail
 
 checkInitialized :: AST -> L1ExceptT ()
-checkInitialized ast = void $ execStateT (mapM_ checkStmt ast) $ InitState {initialized = Set.empty, allInit = False, step = Nothing}
+checkInitialized ast = void $ execStateT (mapM_ checkStmt ast) newState
 
 checkStmt :: Stmt -> L1InitCheck ()
 checkStmt (SimpStmt s) = checkSimp s
-checkStmt (BlockStmt b _) = mapM_ checkStmt b
+checkStmt (BlockStmt b _) = scope $ mapM_ checkStmt b
 checkStmt (If e a (Just b) _) = do
   checkExpr e
-  as <- subscope $ checkStmt a
-  bs <- subscope $ checkStmt b
-  defineFrom (intersectState as bs)
+  as <- tryInitialized . scope . checkStmt $ a
+  bs <- tryInitialized . scope . checkStmt $ b
+  defineFrom (Set.intersection as bs)
 checkStmt (If e a Nothing _) = do
-  checkExpr e
-  void . subscope $ checkStmt a
+  scope $ checkExpr e
+  void . tryInitialized $ checkStmt a
 checkStmt (While e s _) = do
   checkExpr e
-  void . subscope . checkStmt $ s
-checkStmt (For a b (Just q) body _) = do
+  scope . void . tryInitialized . checkStmt $ s
+checkStmt (For a b (Just q) body _) = scope $ do
   traverse_ checkSimp a
   loopScope q $ do
     checkExpr b
     checkStmt body
     checkLoopSimp
-checkStmt (For a b Nothing body _) = do
+checkStmt (For a b Nothing body _) = scope $ do
   traverse_ checkSimp a
-  void . subscope $ do
+  void . tryInitialized $ do
     checkExpr b
     checkStmt body
     checkLoopSimp
@@ -90,8 +106,8 @@ checkStmt (Continue {}) = checkLoopSimp >> defineAll
 checkStmt (Ret e _) = checkExpr e >> defineAll
 
 checkSimp :: Simp -> L1InitCheck ()
-checkSimp (Decl {}) = pure ()
-checkSimp (Init _ name e _) = checkExpr e >> define name
+checkSimp (Decl _ name _) = declare name
+checkSimp (Init _ name e _) = checkExpr e >> declare name >> define name
 checkSimp (Asgn target Nothing expr _) = checkExpr expr >> define target
 checkSimp (Asgn target (Just _) expr _) = checkDefined target >> checkExpr expr
 
