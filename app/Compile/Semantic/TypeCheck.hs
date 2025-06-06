@@ -8,6 +8,7 @@ import Control.Monad.Trans.Except (catchE)
 import Data.Foldable (traverse_)
 import qualified Data.Map as Map
 import Error (L1ExceptT, semanticFail)
+import Text.Megaparsec (SourcePos)
 
 data VariableStatus
   = Declared
@@ -80,17 +81,26 @@ checkSimp (Init ty name e pos) = do
       "Variable " ++ name ++ " redeclared (initialized) at: " ++ posPretty pos
   checkExpr ty e
   declare name ty
-checkSimp (Asgn name _ e pos) = do
+checkSimp (Asgn name Nothing e pos) = do
   val <- gets (Map.lookup name)
   case val of
-    Nothing ->
-      semanticFail' $
-        "Trying to assign to undeclared variable "
-          ++ name
-          ++ " at: "
-          ++ posPretty pos
+    Nothing -> undeclaredFail name pos
     Just ty ->
       checkExpr ty e
+checkSimp (Asgn name (Just op) e pos) = do
+  val <- gets (Map.lookup name)
+  case val of
+    Nothing -> undeclaredFail name pos
+    Just IntType -> checkExpr IntType e
+    Just ty -> semanticFail' $ show op ++ " does not work on " ++ show ty ++ ", only bool at: " ++ posPretty pos
+
+undeclaredFail :: String -> SourcePos -> L1TypeCheck ()
+undeclaredFail name pos =
+  semanticFail' $
+    "Trying to assign to undeclared variable "
+      ++ name
+      ++ " at: "
+      ++ posPretty pos
 
 checkExpr :: Type -> Expr -> L1TypeCheck ()
 checkExpr IntType (IntExpr str pos) = do
