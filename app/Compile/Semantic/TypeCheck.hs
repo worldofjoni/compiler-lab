@@ -24,9 +24,9 @@ semanticFail' :: String -> L1TypeCheck a
 semanticFail' = lift . semanticFail
 
 -- right now an AST is just a list of statements
-varStatusAnalysis :: AST -> L1ExceptT Namespace
+varStatusAnalysis :: AST -> L1ExceptT ()
 varStatusAnalysis stmts = do
-  execStateT (mapM_ checkStmt stmts) Map.empty
+  void $ execStateT (mapM_ checkStmt stmts) Map.empty
 
 subscope :: L1TypeCheck () -> L1TypeCheck ()
 subscope action = do
@@ -55,10 +55,14 @@ checkStmt (While c s _) = subscope $ do
   checkStmt s
 checkStmt (For init_ e' step s' p) = subscope $ do
   traverse_ checkSimp init_
-  subscope $ do
-    checkExpr BoolType e'
-    traverse_ (\step' -> when (isDecl step') $ semanticFail' ("Step statement must not be a declatation at: " ++ posPretty p) >> checkSimp step') step
-    checkStmt s'
+  checkExpr BoolType e'
+  traverse_
+    ( \step' -> do
+        when (isDecl step') $ semanticFail' ("Step statement must not be a declatation at: " ++ posPretty p)
+        checkSimp step'
+    )
+    step
+  checkStmt s'
 checkStmt (Break _) = pure ()
 checkStmt (Continue _) = pure ()
 
