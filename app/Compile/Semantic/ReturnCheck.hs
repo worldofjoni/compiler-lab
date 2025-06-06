@@ -11,5 +11,5 @@ checkReturns stmts = do
 returns:: Stmt -> Bool
 returns (Ret _ _) = True
 returns (If _ thenStmt (Just elseStmt) _) = returns thenStmt && returns elseStmt
-returns (BlockStmt (x:xs) sourcePos) = returns x && returns (BlockStmt xs sourcePos)
+returns (BlockStmt (x:xs) sourcePos) = returns x || returns (BlockStmt xs sourcePos)
 returns _ = False

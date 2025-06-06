@@ -74,7 +74,6 @@ genIStmt (Unary reg Neg a) =
       "negl %eax",
       mov "%eax" (stackAddress reg)
     ]
-
 -- bitwise
 genIStmt (x :<-+ (a, BitOr, b)) =
   unlines
@@ -100,7 +99,6 @@ genIStmt (Unary x BitNot a) =
       "not %eax",
       mov "%eax" (stackAddress x)
     ]
-
 -- comparisons
 genIStmt (x :<-+ (a, Lt, b)) = genCompare "setl" x a b
 genIStmt (x :<-+ (a, Le, b)) = genCompare "setle" x a b
@@ -108,12 +106,10 @@ genIStmt (x :<-+ (a, Eq, b)) = genCompare "sete" x a b
 genIStmt (x :<-+ (a, Neq, b)) = genCompare "setne" x a b
 genIStmt (x :<-+ (a, Ge, b)) = genCompare "setge" x a b
 genIStmt (x :<-+ (a, Gt, b)) = genCompare "setg" x a b
-
 -- logical
 genIStmt (_ :<-+ (_, And, _)) = error "logical and should have been eliminated by translate"
 genIStmt (_ :<-+ (_, Or, _)) = error "logical and should have been eliminated by translate"
 genIStmt (Unary x Not a) = genIStmt (Unary x BitNot a)
-
 genIStmt Nop = ""
 
 genCompare :: String -> VRegister -> Operand -> Operand -> String
