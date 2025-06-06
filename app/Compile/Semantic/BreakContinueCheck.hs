@@ -1,1 +1,16 @@
 module Compile.Semantic.BreakContinueCheck where
+
+import Compile.AST 
+import Control.Monad (unless)
+import Error (L1ExceptT, semanticFail)
+
+checkBreakContinue :: AST -> L1ExceptT ()
+checkBreakContinue = mapM_ (check 0) 
+
+check:: Int -> Stmt -> L1ExceptT ()
+check loops (Break pos) = unless (loops > 0) $ semanticFail $ "break outside loop at " ++ posPretty pos
+check loops (Continue pos) = unless (loops > 0) $ semanticFail $ "continue outside loop at " ++ posPretty pos
+check loops (While _ body _) = check (loops + 1) body
+check loops (For _ _ _ body _) = check (loops + 1) body
+check loops (BlockStmt stmts _) = mapM_ (check loops) stmts
+check _ _ = pure ()
