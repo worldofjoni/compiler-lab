@@ -125,13 +125,13 @@ decConst i = '$' : show i
 
 genIStmt :: IStmt -> CodeGen ()
 genIStmt (Return o) = do
-  reg <- getOperandOrImm o
-  emitAll [mov reg "%eax", "ret"]
+  getOperandEnsureReg o eax
+  emitAll ["ret"]
 genIStmt (Label l) = emitAll [l ++ ":"]
 genIStmt (Goto l) = emitAll ["jmp " ++ l]
 genIStmt (GotoIfNot l b) = do
-  reg <- getOperandOrImm b
-  emitAll [mov reg "%ecx", "cmpl $0, %ecx", "je " ++ l]
+  getOperandEnsureReg b ecx
+  emitAll ["cmpl $0, %ecx", "je " ++ l]
 genIStmt (x :<- (Imm i)) = do
   reg <- getRegister x
   emitAll [mov (decConst i) (show reg)]
@@ -141,10 +141,10 @@ genIStmt (x :<- (Reg r)) = do
   emitAll [mov (show regR) (show regX)]
 genIStmt (x :<-+ (a, Mul, b)) = do
   regA <- getOperandReg a eax
-  regB <- getOperandReg b ebx
+  getOperandEnsureReg b ebx
   emitAll
-    ["imul " ++ regA ++ ", " ++ regB]
-  saveResult regB x
+    ["imul " ++ regA ++ ", " ++ ebx]
+  saveResult ebx x
 genIStmt (x :<-+ (a, Div, b)) = do
   getOperandEnsureReg a eax
   getOperandEnsureReg b ecx
@@ -162,49 +162,49 @@ genIStmt (x :<-+ (a, Mod, b)) = do
     ]
   saveResult edx x
 genIStmt (x :<-+ (a, Add, b)) = do
-  regA <- getOperandReg a eax
+  getOperandEnsureReg a eax
   regB <- getOperandOrImm b
-  emitAll ["addl " ++ regB ++ ", " ++ regA]
-  saveResult regA x
+  emitAll ["addl " ++ regB ++ ", " ++ eax]
+  saveResult eax x
 genIStmt (x :<-+ (a, Sub, b)) = do
-  regA <- getOperandReg a eax
+  getOperandEnsureReg a eax
   regB <- getOperandOrImm b
-  emitAll ["subl " ++ regB ++ ", " ++ regA]
-  saveResult regA x
+  emitAll ["subl " ++ regB ++ ", " ++ eax]
+  saveResult eax x
 genIStmt (x :<-+ (a, Shl, b)) = do
-  regA <- getOperandReg a eax
+  getOperandEnsureReg a eax
   getOperandEnsureReg b ecx
-  emitAll ["shl %cl, " ++ regA]
-  saveResult regA x
+  emitAll ["shl %cl, " ++ eax]
+  saveResult eax x
 genIStmt (x :<-+ (a, Shr, b)) = do
-  regA <- getOperandReg a eax
+  getOperandEnsureReg a eax
   getOperandEnsureReg b ecx
-  emitAll ["sar %cl, " ++ regA]
-  saveResult regA x
+  emitAll ["sar %cl, " ++ eax]
+  saveResult eax x
 genIStmt (Unary reg Neg a) = do
-  regA <- getOperandReg a eax
-  emitAll ["negl " ++ regA]
-  saveResult regA reg
+  getOperandEnsureReg a eax
+  emitAll ["negl " ++ eax]
+  saveResult eax reg
 -- bitwise
 genIStmt (x :<-+ (a, BitOr, b)) = do
-  regA <- getOperandReg a eax
+  getOperandEnsureReg a eax
   regB <- getOperandOrImm b
-  emitAll ["or " ++ regB ++ ", " ++ regA]
-  saveResult regA x
+  emitAll ["or " ++ regB ++ ", " ++ eax]
+  saveResult eax x
 genIStmt (x :<-+ (a, BitAnd, b)) = do
-  regA <- getOperandReg a eax
+  getOperandEnsureReg a eax
   regB <- getOperandOrImm b
-  emitAll ["and " ++ regB ++ ", " ++ regA]
-  saveResult regA x
+  emitAll ["and " ++ regB ++ ", " ++ eax]
+  saveResult eax x
 genIStmt (x :<-+ (a, BitXor, b)) = do
-  regA <- getOperandReg a eax
+  getOperandEnsureReg a eax
   regB <- getOperandOrImm b
-  emitAll ["xor " ++ regB ++ ", " ++ regA]
-  saveResult regA x
+  emitAll ["xor " ++ regB ++ ", " ++ eax]
+  saveResult eax x
 genIStmt (Unary x BitNot a) = do
-  regA <- getOperandReg a eax
-  emitAll ["not " ++ regA]
-  saveResult regA x
+  getOperandEnsureReg a eax
+  emitAll ["not " ++ eax]
+  saveResult eax x
 -- comparisons
 genIStmt (x :<-+ (a, Lt, b)) = genCompare "setl" x a b
 genIStmt (x :<-+ (a, Le, b)) = genCompare "setle" x a b
@@ -216,9 +216,9 @@ genIStmt (x :<-+ (a, Gt, b)) = genCompare "setg" x a b
 genIStmt (_ :<-+ (_, And, _)) = error "logical and should have been eliminated by translate"
 genIStmt (_ :<-+ (_, Or, _)) = error "logical or should have been eliminated by translate"
 genIStmt (Unary x Not a) = do
-  regA <- getOperandReg a eax
-  emitAll ["xor $1, " ++ regA]
-  saveResult regA x
+  getOperandEnsureReg a eax
+  emitAll ["xor $1, " ++ eax]
+  saveResult eax x
 genIStmt Nop = pure ()
 
 genCompare :: String -> VRegister -> Operand -> Operand -> CodeGen ()
