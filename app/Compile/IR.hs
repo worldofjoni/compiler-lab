@@ -1,9 +1,8 @@
-module Compile.IR
-where
+module Compile.IR where
 
 import Compile.AST (Op, UnOp)
 
-type VRegister = Int -- virtual register
+newtype VRegister = VRegister Int deriving (Eq, Ord) -- virtual register
 
 type Label = String
 
@@ -22,7 +21,7 @@ data IStmt
   | Nop
 
 instance Show Operand where
-  show (Reg r) = "vreg" ++ show r
+  show (Reg (VRegister r)) = "vreg" ++ show r
   show (Imm n) = show n
 
 instance Show IStmt where
@@ -33,3 +32,4 @@ instance Show IStmt where
   show Nop = "nop"
   show (Goto l) = "goto " ++ show l
   show (GotoIfNot l op) = "goto " ++ show l ++ " if not " ++ show op
+  show (Label l) = l ++ ":"

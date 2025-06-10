@@ -7,7 +7,6 @@ import Compile.AST
 import Compile.IR
 import Control.Monad.State
 import qualified Data.Map as Map
-import Options.Applicative (long)
 
 type VarName = String
 
@@ -27,14 +26,14 @@ data TranslateState = TranslateState
 translate :: AST -> IR
 translate stmts = code $ execState (genBlock stmts) initialState
   where
-    initialState = TranslateState Map.empty 0 0 [] [] []
+    initialState = TranslateState Map.empty (VRegister 0) 0 [] [] []
 
 freshReg :: Translate VRegister
 freshReg = do
   curr <- get
-  let r = nextReg curr
-  put curr {nextReg = r + 1}
-  return r
+  let VRegister r = nextReg curr
+  put curr {nextReg = VRegister $ r + 1}
+  return $ VRegister r
 
 freshLabel :: Translate Label
 freshLabel = do
@@ -59,17 +58,18 @@ lookupVar name = do
     Just r -> return r
     Nothing -> error "unreachable, fix your semantic analysis I guess"
 
-
 emit :: IStmt -> Translate ()
 emit instr = modify $ \s -> s {code = code s ++ [instr]}
 
 pushLoopEnd :: Label -> Translate ()
 pushLoopEnd l = modify $ \s -> s {loopEnds = l : loopEnds s}
+
 popLoopEnd :: () -> Translate ()
 popLoopEnd () = modify $ \s -> s {loopEnds = tail $ loopEnds s}
 
 pushLoopContinue :: Label -> Translate ()
 pushLoopContinue l = modify $ \s -> s {loopContinues = l : loopContinues s}
+
 popLoopContinue :: () -> Translate ()
 popLoopContinue () = modify $ \s -> s {loopContinues = tail $ loopContinues s}
 
@@ -147,15 +147,13 @@ genStmt (Continue _) = do
   curr <- get
   emit . Goto . head . loopContinues $ curr
 genStmt (BlockStmt [] _) = pure ()
-genStmt (BlockStmt (x:xs) sourcePos) = do
+genStmt (BlockStmt (x : xs) sourcePos) = do
   genStmt x
   genStmt (BlockStmt xs sourcePos)
-  
-
 
 maybeGenStmt :: Maybe Stmt -> Translate ()
 maybeGenStmt Nothing = pure ()
-maybeGenStmt (Just s) = do 
+maybeGenStmt (Just s) = do
   _ <- genStmt s
   return ()
 
@@ -173,7 +171,7 @@ toOperand e = do
   assignTo t e
   return $ Reg t
 
-boolToInt:: Bool -> Integer
+boolToInt :: Bool -> Integer
 boolToInt True = 1
 boolToInt False = 0
 
@@ -191,7 +189,7 @@ assignTo d (UnExpr op e) = do
 assignTo d (BinExpr e1 And e2) = do
   shortLabel <- freshLabelWithPrefix "short"
   endLabel <- freshLabelWithPrefix "endshort"
-  x1 <- toOperand e1 
+  x1 <- toOperand e1
   emit $ GotoIfNot shortLabel x1
   x2 <- toOperand e2
   emit $ d :<- x2
@@ -202,7 +200,7 @@ assignTo d (BinExpr e1 And e2) = do
 assignTo d (BinExpr e1 Or e2) = do
   longLabel <- freshLabelWithPrefix "long"
   endLabel <- freshLabelWithPrefix "endlong"
-  x1 <- toOperand e1 
+  x1 <- toOperand e1
   emit $ GotoIfNot longLabel x1
   emit $ d :<- Imm 1
   emit $ Goto endLabel

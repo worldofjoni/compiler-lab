@@ -27,7 +27,7 @@ executable l1c
                   parser-combinators,
                   transformers,
                   process,
-                  array
+                  lrucache
     other-modules:
                   Args,
                   Compile,
