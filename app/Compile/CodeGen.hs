@@ -8,7 +8,7 @@ module Compile.CodeGen (genAsm, genIStmt) where
 import Compile.AST (Op (..), UnOp (..))
 import Compile.IR (IR, IStmt (..), Operand (..), VRegister (VRegister))
 import Control.Monad.State (State, execState, gets, modify)
-import Data.Cache.LRU (LRU, fromList, insert, pop)
+import Data.Cache.LRU as LRU (LRU, fromList, insert, lookup, pop)
 import Data.Foldable (traverse_)
 import Data.Functor ((<&>))
 import qualified Data.Map as Map
@@ -51,14 +51,14 @@ getRegister :: VRegister -> CodeGen PRegister
 getRegister vReg = do
   cached <- gets (Map.lookup vReg . regMap)
   case cached of
-    Just pReg -> pure pReg
+    Just pReg -> touchCache pReg >> pure pReg
     Nothing -> loadToCache vReg
 
 saveResult :: String -> VRegister -> CodeGen ()
 saveResult source vReg = do
   cached <- gets (Map.lookup vReg . regMap)
   case cached of
-    Just pReg -> emitAll [mov source (show pReg)]
+    Just pReg -> touchCache pReg >> emitAll [mov source (show pReg)]
     Nothing -> do
       pReg <- loadToCache vReg
       emitAll [mov source (show pReg)]
@@ -73,6 +73,10 @@ loadToCache vReg = do
   let cache'' = insert pReg (Just vReg) cache'
   modify (\r -> r {regCache = cache'', regMap = Map.insert vReg pReg . Map.filterWithKey (\a _ -> Just a /= storeVReg) . regMap $ r})
   pure pReg
+
+touchCache :: PRegister -> CodeGen ()
+touchCache pReg = do
+  modify (\r -> r {regCache = fst . LRU.lookup pReg . regCache $ r})
 
 getOperandOrImm :: Operand -> CodeGen String
 getOperandOrImm (Reg r) = getRegister r <&> show
@@ -223,6 +227,7 @@ genIStmt Nop = pure ()
 
 genCompare :: String -> VRegister -> Operand -> Operand -> CodeGen ()
 genCompare setInst x a b = do
+  emitAll ["# -- comparing " ++ setInst ++ " " ++ show a ++ " " ++ show b]
   getOperandEnsureReg a eax
   regB <- getOperandOrImm b
   emitAll
