@@ -6,7 +6,10 @@ import Error (L1ExceptT, semanticFail)
 import Data.Maybe (maybeToList)
 
 checkBreakContinue :: AST -> L1ExceptT ()
-checkBreakContinue = mapM_ (check 0) 
+checkBreakContinue = mapM_ (check 0) . concatMap functionBody
+
+functionBody :: Function -> Block
+functionBody (Func _ _ _ body _) = body
 
 check:: Int -> Stmt -> L1ExceptT ()
 check loops (Break pos) = unless (loops > 0) $ semanticFail $ "break outside loop at " ++ posPretty pos

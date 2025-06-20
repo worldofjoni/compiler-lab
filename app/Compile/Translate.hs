@@ -25,7 +25,7 @@ data TranslateState = TranslateState
   }
 
 translate :: AST -> IR
-translate stmts = code $ execState (genBlock stmts) initialState
+translate stmts = code $ execState (genFunctions stmts) initialState
   where
     initialState = TranslateState Map.empty 0 0 [] [] []
 
@@ -72,6 +72,9 @@ pushLoopContinue :: Label -> Translate ()
 pushLoopContinue l = modify $ \s -> s {loopContinues = l : loopContinues s}
 popLoopContinue :: () -> Translate ()
 popLoopContinue () = modify $ \s -> s {loopContinues = tail $ loopContinues s}
+
+genFunctions:: [Function] -> Translate ()
+genFunctions = error "translation of functions is not implemented"
 
 genBlock :: [Stmt] -> Translate ()
 genBlock = mapM_ genStmt

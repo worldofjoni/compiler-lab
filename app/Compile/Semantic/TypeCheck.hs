@@ -1,14 +1,17 @@
 module Compile.Semantic.TypeCheck (varStatusAnalysis) where
 
-import Compile.AST (AST, Expr (..), Op (..), Simp (Asgn, Decl, Init), Stmt (..), Type (BoolType, IntType), UnOp (BitNot, Neg, Not), isDecl, posPretty)
+import Compile.AST
 import Compile.Parser (parseNumber)
-import Control.Monad (unless, void, when)
+import Control.Monad (unless, void, when, zipWithM_)
 import Control.Monad.State
 import Control.Monad.Trans.Except (catchE)
 import Data.Foldable (traverse_)
+import Data.List (sort)
 import qualified Data.Map as Map
+import Data.Maybe (fromMaybe, fromJust)
+import Data.Tuple (swap)
 import Error (L1ExceptT, semanticFail)
-import Text.Megaparsec (SourcePos)
+import Text.Megaparsec (SourcePos, sourcePosPretty)
 
 data VariableStatus
   = Declared
@@ -18,16 +21,46 @@ data VariableStatus
 -- You might want to keep track of some location information as well at some point
 type Namespace = Map.Map String Type
 
-type L1TypeCheck = StateT Namespace L1ExceptT
+type Signature = (Type, [Type])
+
+functionSignatures :: AST -> L1ExceptT (Map.Map String Signature)
+functionSignatures ast = do
+  let sigs = map sig ast ++ predefined
+  let names = map fst sigs
+  unless (distinct names) (semanticFail "function names are not distinct")
+  unless ("main" `elem` names) (semanticFail "no main function")
+  return . Map.fromList $ sigs
+  where
+    sig (Func ret name params _ _) = (name, (ret, map fst params))
+    predefined = [("print", (IntType, [IntType])), ("read", (IntType, [])), ("flush", (IntType, []))]
+
+distinct :: [String] -> Bool
+distinct l = and $ zipWith (/=) sorted (tail sorted)
+  where
+    sorted = sort l
+
+type L1TypeCheck = StateT Context L1ExceptT
+
+data Context = Context {namespace :: Namespace, signature :: Map.Map String Signature, currRetType :: Type}
 
 -- A little wrapper so we don't have to ($ lift) everywhere inside the StateT
 semanticFail' :: String -> L1TypeCheck a
 semanticFail' = lift . semanticFail
 
--- right now an AST is just a list of statements
+initalNamespace :: [(Type, String)] -> Namespace
+initalNamespace = Map.fromList . map swap
+
 varStatusAnalysis :: AST -> L1ExceptT ()
-varStatusAnalysis stmts = do
-  void $ execStateT (mapM_ checkStmt stmts) Map.empty
+varStatusAnalysis ast =
+  do
+    signatures <- functionSignatures ast
+    mapM_ (checkFunction signatures) ast
+
+checkFunction :: Map.Map String Signature -> Function -> L1ExceptT ()
+checkFunction signatrues (Func t _ params stmts _) = do
+  void $ execStateT (mapM_ checkStmt stmts) initialState
+  where
+    initialState = Context (initalNamespace params) signatrues t
 
 subscope :: L1TypeCheck () -> L1TypeCheck ()
 subscope action = do
@@ -35,15 +68,20 @@ subscope action = do
   void . lift . runStateT action $ ns
 
 declare :: String -> Type -> L1TypeCheck ()
-declare name ty = modify (Map.insert name ty)
+declare name ty =
+  modify $ \s -> s {namespace = Map.insert name ty (namespace s)}
 
 -- So far this checks:
 -- + we cannot declare a variable again that has already been declared or initialized
 -- + we cannot initialize a variable again that has already been declared or initialized
 -- + a variable needs to be declared or initialized before we can assign to it
 -- + we can only return valid expressions
+-- + function calls
 checkStmt :: Stmt -> L1TypeCheck ()
-checkStmt (Ret e _) = checkExpr IntType e
+checkStmt (Ret e _) = do
+  t <- gets (currRetType)
+  checkExpr t e
+  checkExpr IntType e
 checkStmt (SimpStmt s) = checkSimp s
 checkStmt (BlockStmt b _) =
   subscope $ mapM_ checkStmt b
@@ -66,29 +104,40 @@ checkStmt (For init_ e' step s' p) = subscope $ do
   checkStmt s'
 checkStmt (Break _) = pure ()
 checkStmt (Continue _) = pure ()
+checkStmt (CallStmt name args pos) = checkCall Nothing name args pos
+
+checkCall :: Maybe Type -> String -> [Expr] -> SourcePos -> L1TypeCheck ()
+checkCall mRetType name args pos = do
+  m <- gets (Map.lookup name . signature)
+  case m of
+    Nothing -> semanticFail' $ "call of undefined function " ++ name ++ " at " ++ sourcePosPretty pos
+    Just (retT, types) -> do
+      unless (length types == length args) (semanticFail' ("expected " ++ show (length types) ++ " arguments, but got " ++ show (length args) ++ " at " ++ sourcePosPretty pos))
+      zipWithM_ checkExpr types args
+      unless (fromMaybe retT mRetType == retT) (semanticFail' (name ++ " returns " ++ show retT ++ " but " ++ show (fromJust mRetType) ++ " was expected at " ++ sourcePosPretty pos))
 
 checkSimp :: Simp -> L1TypeCheck ()
 checkSimp (Decl ty name pos) = do
-  isDeclared <- gets (Map.member name)
+  isDeclared <- gets (Map.member name . namespace)
   when isDeclared $
     semanticFail' $
       "Variable " ++ name ++ " redeclared at: " ++ posPretty pos
   declare name ty
 checkSimp (Init ty name e pos) = do
-  isDeclared <- gets (Map.member name)
+  isDeclared <- gets (Map.member name . namespace)
   when isDeclared $
     semanticFail' $
       "Variable " ++ name ++ " redeclared (initialized) at: " ++ posPretty pos
   checkExpr ty e
   declare name ty
 checkSimp (Asgn name Nothing e pos) = do
-  val <- gets (Map.lookup name)
+  val <- gets (Map.lookup name . namespace)
   case val of
     Nothing -> undeclaredFail name pos
     Just ty ->
       checkExpr ty e
 checkSimp (Asgn name (Just op) e pos) = do
-  val <- gets (Map.lookup name)
+  val <- gets (Map.lookup name . namespace)
   case val of
     Nothing -> undeclaredFail name pos
     Just IntType -> checkExpr IntType e
@@ -112,7 +161,7 @@ checkExpr IntType (IntExpr str pos) = do
     Right _ -> return ()
 checkExpr ty (IntExpr _ pos) = semanticFail' $ "Expected " ++ show ty ++ " but got integer at: " ++ posPretty pos
 checkExpr ty (IdentExpr name pos) = do
-  val <- gets (Map.lookup name)
+  val <- gets (Map.lookup name . namespace)
   case val of
     Just ty2
       | ty2 == ty -> return ()
@@ -163,6 +212,7 @@ checkExpr ty (Ternary a b c) = do
   checkExpr BoolType a
   checkExpr ty b
   checkExpr ty c
+checkExpr ty (Call name args pos) = checkCall (Just ty) name args pos
 
 intToBoolOp :: [Op]
 intToBoolOp = [Lt, Le, Gt, Ge, Eq, Neq]

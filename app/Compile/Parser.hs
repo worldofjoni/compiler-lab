@@ -4,7 +4,7 @@ module Compile.Parser
   )
 where
 
-import Compile.AST (AST, Expr (..), Op (..), Simp (Asgn, Decl, Init), Stmt (..), Type (BoolType, IntType), UnOp (..))
+import Compile.AST 
 import Control.Applicative (asum)
 import Control.Monad.Combinators.Expr
 import Control.Monad.IO.Class (liftIO)
@@ -37,12 +37,22 @@ astParser :: Parser AST
 astParser = do
   sc
   -- this parses `int main()` literally, like in the L1 grammar
-  reserved "int"
-  reserved "main"
-  parens $ pure ()
-  BlockStmt block _ <- parseBlock
+  functions <- many parseFunction
   eof
-  return block
+  return functions
+
+parseFunction :: Parser Function
+parseFunction = do
+  pos <- getSourcePos
+  retT <- parseType
+  name <- identifier
+  params <- parens (parseArguments)
+  block <- parseBlock
+  return $ Func retT name params block pos
+
+parseArguments :: Parser [(Type, String)]
+parseArguments = pure []
+
 
 parseType :: Parser Type
 parseType = IntType <$ reserved "int" <|> BoolType <$ reserved "bool" <?> "type"
@@ -53,7 +63,7 @@ stmt =
       <$> simp
       <* semi
   )
-    <|> parseBlock
+    <|> parseBlockStmt
     <|> parseIf
     <|> parseWhile
     <|> parseFor
@@ -61,10 +71,14 @@ stmt =
     <|> parseBreak
     <|> ret
 
-parseBlock :: Parser Stmt
-parseBlock = do
+parseBlock :: Parser Block
+parseBlock = braces (many stmt)
+
+parseBlockStmt :: Parser Stmt
+parseBlockStmt = do
   pos <- getSourcePos
-  BlockStmt <$> braces (many stmt) <*> return pos
+  block <- parseBlock
+  return $ BlockStmt block pos
 
 parseIf :: Parser Stmt
 parseIf = do

@@ -4,7 +4,9 @@ import Text.Megaparsec
 
 type AST = Program
 
-type Program = Block
+type Program = [Function]
+
+data Function = Func Type String [(Type, String)] Block SourcePos
 
 type Block = [Stmt]
 
@@ -13,6 +15,7 @@ data Type = IntType | BoolType deriving (Eq)
 instance Show Type where
   show IntType = "int"
   show BoolType = "bool"
+
 
 data Stmt
   = SimpStmt Simp
@@ -23,6 +26,7 @@ data Stmt
   | Break SourcePos
   | Continue SourcePos
   | Ret Expr SourcePos
+  | CallStmt String [Expr] SourcePos
 
 data Simp
   = Decl Type String SourcePos
@@ -40,6 +44,7 @@ data Expr
   | BinExpr Expr Op Expr
   | UnExpr UnOp Expr
   | Ternary Expr Expr Expr
+  | Call String [Expr] SourcePos
 
 -- Nothing means =, Just is for +=, %=, ...
 type AsgnOp = Maybe Op

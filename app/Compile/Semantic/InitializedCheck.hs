@@ -11,7 +11,7 @@ import Data.Set as Set
     intersection,
     member,
     union,
-    (\\),
+    (\\), fromList,
   )
 import Error (L1ExceptT, semanticFail)
 import Text.Megaparsec (SourcePos)
@@ -24,8 +24,8 @@ data InitState = InitState
     step :: Maybe Simp
   }
 
-newState :: InitState
-newState = InitState {initialized = Set.empty, step = Nothing, scopes = [Set.empty]}
+newState :: [(Type, String)] -> InitState
+newState parms = InitState {initialized = Set.fromList . map snd $ parms, step = Nothing, scopes = [Set.empty]}
 
 type L1InitCheck = StateT InitState L1ExceptT
 
@@ -76,7 +76,10 @@ semanticFail' :: String -> L1InitCheck a
 semanticFail' = lift . semanticFail
 
 checkInitialized :: AST -> L1ExceptT ()
-checkInitialized ast = void $ execStateT (mapM_ checkStmt ast) newState
+checkInitialized [] = pure ()
+checkInitialized (Func _ _ params stmts _:fs) = do
+   _ <- execStateT (mapM_ checkStmt stmts) (newState params)
+   checkInitialized fs
 
 checkStmt :: Stmt -> L1InitCheck ()
 checkStmt (SimpStmt s) = checkSimp s
@@ -107,6 +110,7 @@ checkStmt (For a b Nothing body _) = scope $ do
 checkStmt (Break {}) = checkLoopSimp >> defineAll
 checkStmt (Continue {}) = checkLoopSimp >> defineAll
 checkStmt (Ret e _) = checkExpr e >> defineAll
+checkStmt (CallStmt _ args _) = mapM_ checkExpr args
 
 checkSimp :: Simp -> L1InitCheck ()
 checkSimp (Decl _ name _) = declare name
@@ -121,3 +125,4 @@ checkExpr (IdentExpr name pos) = assertDefined name pos
 checkExpr (BinExpr e1 _ e2) = checkExpr e1 >> checkExpr e2
 checkExpr (UnExpr _ e) = checkExpr e
 checkExpr (Ternary a b c) = checkExpr a >> checkExpr b >> checkExpr c
+checkExpr (Call _ args _)  = mapM_ checkExpr args

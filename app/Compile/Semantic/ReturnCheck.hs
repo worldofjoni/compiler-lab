@@ -5,8 +5,10 @@ import Control.Monad (unless)
 import Error (L1ExceptT, semanticFail)
 
 checkReturns :: AST -> L1ExceptT ()
-checkReturns stmts = do
+checkReturns [] = pure ()
+checkReturns (Func _ _ _ stmts _:fs) = do
   unless (any returns stmts) $ semanticFail "Program does not return"
+  checkReturns fs
 
 returns:: Stmt -> Bool
 returns (Ret _ _) = True
