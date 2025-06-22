@@ -4,7 +4,7 @@ module Compile.Parser
   )
 where
 
-import Compile.AST 
+import Compile.AST
 import Control.Applicative (asum)
 import Control.Monad.Combinators.Expr
 import Control.Monad.IO.Class (liftIO)
@@ -36,7 +36,6 @@ type Parser = Parsec Void String
 astParser :: Parser AST
 astParser = do
   sc
-  -- this parses `int main()` literally, like in the L1 grammar
   functions <- many parseFunction
   eof
   return functions
@@ -45,31 +44,37 @@ parseFunction :: Parser Function
 parseFunction = do
   pos <- getSourcePos
   retT <- parseType
-  name <- identifier
-  params <- parens (parseArguments)
+  name <- funcIdentifier
+  params <- nTuple $ (,) <$> parseType <*> identifier
   block <- parseBlock
   return $ Func retT name params block pos
 
-parseArguments :: Parser [(Type, String)]
-parseArguments = pure []
+parseCall :: Parser (String, [Expr], SourcePos)
+parseCall = (,,) <$> funcIdentifier <*> nTuple expr <*> getSourcePos
 
+nTuple :: Parser a -> Parser [a]
+nTuple p = parens $ ((:) <$> p <*> many (symbol "," >> p)) <|> pure []
 
 parseType :: Parser Type
 parseType = IntType <$ reserved "int" <|> BoolType <$ reserved "bool" <?> "type"
 
 stmt :: Parser Stmt
 stmt =
-  ( SimpStmt
-      <$> simp
-      <* semi
-  )
-    <|> parseBlockStmt
+    try ( SimpStmt
+        <$> simp
+        <* semi
+    )
+    <|> (uncurry3 CallStmt <$> parseCall <* semi)
     <|> parseIf
     <|> parseWhile
     <|> parseFor
     <|> parseContinue
     <|> parseBreak
     <|> ret
+    <|> parseBlockStmt
+
+uncurry3 :: (a -> b -> c -> d) -> (a, b, c) -> d
+uncurry3 f (x, y, z) = f x y z
 
 parseBlock :: Parser Block
 parseBlock = braces (many stmt)
@@ -166,7 +171,7 @@ ret = do
   return $ Ret e pos
 
 expr' :: Parser Expr
-expr' = parens expr <|> identExpr <|> intExpr <|> boolExpr
+expr' = parens expr <|> identExpr <|> intExpr <|> boolExpr <|> (uncurry3 Call <$> parseCall)
 
 intExpr :: Parser Expr
 intExpr = do
@@ -276,6 +281,19 @@ hexadecimal = do
 reserved :: String -> Parser ()
 reserved w = void $ lexeme $ (string w <* notFollowedBy identLetter)
 
+reservedString :: String -> Parser String
+reservedString w = lexeme (string w <* notFollowedBy identLetter)
+
+funcIdentifier :: Parser String
+funcIdentifier = identifier <|> (choice . map reservedString $ reservedFunctions)
+
+reservedFunctions :: [String]
+reservedFunctions =
+  [ "print",
+    "read",
+    "flush"
+  ]
+
 reservedWords :: [String]
 reservedWords =
   [ "alloc",
@@ -291,8 +309,6 @@ reservedWords =
     "if",
     "int",
     "NULL",
-    "print",
-    "read",
     "return",
     "string",
     "struct",
@@ -300,6 +316,7 @@ reservedWords =
     "void",
     "while"
   ]
+    ++ reservedFunctions
 
 -- Operations
 opStart :: Parser Char

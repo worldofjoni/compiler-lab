@@ -81,7 +81,6 @@ checkStmt :: Stmt -> L1TypeCheck ()
 checkStmt (Ret e _) = do
   t <- gets (currRetType)
   checkExpr t e
-  checkExpr IntType e
 checkStmt (SimpStmt s) = checkSimp s
 checkStmt (BlockStmt b _) =
   subscope $ mapM_ checkStmt b
