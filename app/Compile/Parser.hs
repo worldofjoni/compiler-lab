@@ -171,7 +171,7 @@ ret = do
   return $ Ret e pos
 
 expr' :: Parser Expr
-expr' = parens expr <|> identExpr <|> intExpr <|> boolExpr <|> (uncurry3 Call <$> parseCall)
+expr' = parens expr <|> try (uncurry3 Call <$> parseCall) <|> identExpr <|> intExpr <|> boolExpr 
 
 intExpr :: Parser Expr
 intExpr = do
