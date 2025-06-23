@@ -27,12 +27,17 @@ functionSignatures :: AST -> L1ExceptT (Map.Map String Signature)
 functionSignatures ast = do
   let sigs = map sig ast ++ predefined
   let names = map fst sigs
+  mapM_ checkParamDistinctness ast
   unless (distinct names) (semanticFail "function names are not distinct")
   unless ("main" `elem` names) (semanticFail "no main function")
   return . Map.fromList $ sigs
   where
     sig (Func ret name params _ _) = (name, (ret, map fst params))
     predefined = [("print", (IntType, [IntType])), ("read", (IntType, [])), ("flush", (IntType, []))]
+
+
+checkParamDistinctness:: Function -> L1ExceptT ()
+checkParamDistinctness (Func _ name params _ pos) = unless (distinct . map snd $ params) (semanticFail $ "parameters of function " ++ name ++ " do not have distinct names at " ++ sourcePosPretty pos)
 
 distinct :: [String] -> Bool
 distinct l = and $ zipWith (/=) sorted (tail sorted)
