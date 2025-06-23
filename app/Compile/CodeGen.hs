@@ -138,7 +138,7 @@ genCompare setInst x a b =
 stackAddress :: VRegister -> String
 stackAddress reg
   | reg >= 0 = show (-((reg + 1) * 4)) ++ "(%rbp)" -- current stack frame: skip previous base pointer
-  | otherwise = show (-((reg + 1) * 4) + 16) ++ "(%rbp)" -- function parameters: previous frame: skip return address
+  | otherwise = show (-((reg + 1) * 8) + 16) ++ "(%rbp)" -- function parameters: previous frame: skip return address; paramerers are pused as 8 byte..
 
 showOperand :: Operand -> String
 showOperand (Imm a) = decConst a
