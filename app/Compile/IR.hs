@@ -1,11 +1,14 @@
-module Compile.IR
-where
+module Compile.IR where
 
 import Compile.AST (Op, UnOp)
+import Data.List (intercalate)
+import qualified Data.Map as Map
 
 type VRegister = Int -- virtual register
 
 type Label = String
+
+type FrameSizes = Map.Map Label Int
 
 type IR = [IStmt]
 
@@ -19,6 +22,8 @@ data IStmt
   | Label Label
   | Goto Label
   | GotoIfNot Label Operand
+  | CallIr (Maybe VRegister) Label [VRegister]
+  | FunctionLabel Label
   | Nop
 
 instance Show Operand where
@@ -33,3 +38,6 @@ instance Show IStmt where
   show Nop = "nop"
   show (Goto l) = "goto " ++ show l
   show (GotoIfNot l op) = "goto " ++ show l ++ " if not " ++ show op
+  show (Label l) = l ++ ":"
+  show (CallIr tgt l regs) = maybe "" ((++ " <- ") . show . Reg) tgt ++ "call " ++ l ++ "(" ++ (intercalate ", " . map show) regs ++ ")"
+  show (FunctionLabel label) = label ++ ":"
