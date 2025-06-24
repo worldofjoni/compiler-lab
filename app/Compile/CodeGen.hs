@@ -151,4 +151,14 @@ decConst :: Integer -> String
 decConst i = '$' : show i
 
 preamble :: String
-preamble = ".global main\n.global _main\n.text\nmain:\ncall func_main\n# move the return value into the first argument for the syscall\nmovq %rax, %rdi\n# move the exit syscall number into rax\nmovq $0x3C, %rax\nsyscall\n"
+preamble =
+  ".global main\n.global _main\n.text\nmain:\ncall func_main\n# move the return value into the first argument for the syscall\nmovq %rax, %rdi\n# move the exit syscall number into rax\nmovq $0x3C, %rax\nsyscall\n"
+    ++ functions
+
+functions :: String
+functions =
+  unlines
+    [ "func_print:\nmov $1, %rax\n  mov $1, %rdi\n  mov %rsp, %rsi\n  add $16, %rsi\n  mov $1, %rdx\n  syscall\n  mov $0, %eax\n  ret\n",
+      "func_read:\n  push %rax\n  mov $0, %rax\n  mov $0, %rdi\n  mov %rsp, %rsi\n  mov $1, %rdx\n  syscall\n  mov %rax, %rbx\n  pop %rax\n  and $0xFF, %rax\n  mov $-1, %edx\n  cmp $1, %rbx\n  cmovnz %edx, %eax\n  ret\n  ",
+      "func_flush: \n   mov $0, %eax\n ret\n"
+    ]
