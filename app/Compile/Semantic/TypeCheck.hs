@@ -31,7 +31,7 @@ functionSignatures ast = do
   mapM_ checkParamDistinctness ast
   unless (distinct names) (semanticFail "function names are not distinct")
   unless ("main" `elem` names) (semanticFail "no main function")
-  unless ((fst . fromJust $ Map.lookup "main" sigMap) == IntType) (semanticFail "main must return int")
+  unless (fromJust (Map.lookup "main" sigMap) == (IntType,[])) (semanticFail "main must return int and have no parameters")
   return sigMap
   where
     sig (Func ret name params _ _) = (name, (ret, map fst params))
