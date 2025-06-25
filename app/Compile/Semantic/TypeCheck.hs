@@ -8,7 +8,7 @@ import Control.Monad.Trans.Except (catchE)
 import Data.Foldable (traverse_)
 import Data.List (sort)
 import qualified Data.Map as Map
-import Data.Maybe (fromMaybe, fromJust)
+import Data.Maybe (fromJust, fromMaybe)
 import Data.Tuple (swap)
 import Error (L1ExceptT, semanticFail)
 import Text.Megaparsec (SourcePos, sourcePosPretty)
@@ -27,16 +27,17 @@ functionSignatures :: AST -> L1ExceptT (Map.Map String Signature)
 functionSignatures ast = do
   let sigs = map sig ast ++ predefined
   let names = map fst sigs
+  let sigMap = Map.fromList $ sigs
   mapM_ checkParamDistinctness ast
   unless (distinct names) (semanticFail "function names are not distinct")
   unless ("main" `elem` names) (semanticFail "no main function")
-  return . Map.fromList $ sigs
+  unless ((fst . fromJust $ Map.lookup "main" sigMap) == IntType) (semanticFail "main must return int")
+  return sigMap
   where
     sig (Func ret name params _ _) = (name, (ret, map fst params))
     predefined = [("print", (IntType, [IntType])), ("read", (IntType, [])), ("flush", (IntType, []))]
 
-
-checkParamDistinctness:: Function -> L1ExceptT ()
+checkParamDistinctness :: Function -> L1ExceptT ()
 checkParamDistinctness (Func _ name params _ pos) = unless (distinct . map snd $ params) (semanticFail $ "parameters of function " ++ name ++ " do not have distinct names at " ++ sourcePosPretty pos)
 
 distinct :: [String] -> Bool
