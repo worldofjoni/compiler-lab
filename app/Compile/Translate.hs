@@ -179,7 +179,7 @@ genStmt (BlockStmt [] _) = pure ()
 genStmt (BlockStmt (x : xs) sourcePos) = do
   genStmt x
   genStmt (BlockStmt xs sourcePos)
-genStmt (CallStmt name args _) = do
+genStmt (SimpStmt (SimpCall name args _)) = do
   opsRegs <-
     evalArgs args
   emit $ CallIr Nothing name opsRegs

@@ -60,11 +60,10 @@ parseType = IntType <$ reserved "int" <|> BoolType <$ reserved "bool" <?> "type"
 
 stmt :: Parser Stmt
 stmt =
-    try ( SimpStmt
-        <$> simp
-        <* semi
-    )
-    <|> (uncurry3 CallStmt <$> parseCall <* semi)
+  ( SimpStmt
+      <$> simp
+      <* semi
+  )
     <|> parseIf
     <|> parseWhile
     <|> parseFor
@@ -121,7 +120,7 @@ parseBreak = do
   Break <$ reserved "break" <* semi <*> return pos
 
 simp :: Parser Simp
-simp = asign <|> decl
+simp = decl <|> try asign <|> (uncurry3 SimpCall <$> parseCall)
 
 decl :: Parser Simp
 decl = do
@@ -171,7 +170,7 @@ ret = do
   return $ Ret e pos
 
 expr' :: Parser Expr
-expr' = parens expr <|> try (uncurry3 Call <$> parseCall) <|> identExpr <|> intExpr <|> boolExpr 
+expr' = parens expr <|> try (uncurry3 Call <$> parseCall) <|> identExpr <|> intExpr <|> boolExpr
 
 intExpr :: Parser Expr
 intExpr = do

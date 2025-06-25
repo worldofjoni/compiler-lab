@@ -26,16 +26,16 @@ data Stmt
   | Break SourcePos
   | Continue SourcePos
   | Ret Expr SourcePos
-  | CallStmt String [Expr] SourcePos
 
 data Simp
   = Decl Type String SourcePos
   | Init Type String Expr SourcePos
   | Asgn String AsgnOp Expr SourcePos
+  | SimpCall String [Expr] SourcePos
 
 isDecl :: Simp -> Bool
-isDecl (Asgn {}) = False
-isDecl _ = True
+isDecl (Decl {}) = True
+isDecl _ = False
 
 data Expr
   = IntExpr String SourcePos

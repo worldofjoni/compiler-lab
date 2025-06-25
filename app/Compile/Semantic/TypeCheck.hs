@@ -108,7 +108,6 @@ checkStmt (For init_ e' step s' p) = subscope $ do
   checkStmt s'
 checkStmt (Break _) = pure ()
 checkStmt (Continue _) = pure ()
-checkStmt (CallStmt name args pos) = checkCall Nothing name args pos
 
 checkCall :: Maybe Type -> String -> [Expr] -> SourcePos -> L1TypeCheck ()
 checkCall mRetType name args pos = do
@@ -146,6 +145,7 @@ checkSimp (Asgn name (Just op) e pos) = do
     Nothing -> undeclaredFail name pos
     Just IntType -> checkExpr IntType e
     Just ty -> semanticFail' $ show op ++ " does not work on " ++ show ty ++ ", only bool at: " ++ posPretty pos
+checkSimp (SimpCall name args pos) = checkCall Nothing name args pos
 
 undeclaredFail :: String -> SourcePos -> L1TypeCheck ()
 undeclaredFail name pos =

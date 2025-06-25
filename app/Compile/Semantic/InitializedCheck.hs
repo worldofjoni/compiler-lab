@@ -110,13 +110,13 @@ checkStmt (For a b Nothing body _) = scope $ do
 checkStmt (Break {}) = checkLoopSimp >> defineAll
 checkStmt (Continue {}) = checkLoopSimp >> defineAll
 checkStmt (Ret e _) = checkExpr e >> defineAll
-checkStmt (CallStmt _ args _) = mapM_ checkExpr args
 
 checkSimp :: Simp -> L1InitCheck ()
 checkSimp (Decl _ name _) = declare name
 checkSimp (Init _ name e _) = checkExpr e >> declare name >> define name
 checkSimp (Asgn target Nothing expr _) = checkExpr expr >> define target
 checkSimp (Asgn target (Just _) expr pos) = assertDefined target pos >> checkExpr expr
+checkSimp (SimpCall _ args _) = mapM_ checkExpr args
 
 checkExpr :: Expr -> L1InitCheck ()
 checkExpr (IntExpr _ _) = pure ()
