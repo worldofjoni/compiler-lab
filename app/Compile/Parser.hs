@@ -44,7 +44,7 @@ parseFunction :: Parser Function
 parseFunction = do
   pos <- getSourcePos
   retT <- parseType
-  name <- funcIdentifier
+  name <- identifier
   params <- nTuple $ (,) <$> parseType <*> identifier
   block <- parseBlock
   return $ Func retT name params block pos
