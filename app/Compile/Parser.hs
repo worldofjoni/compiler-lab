@@ -120,7 +120,7 @@ parseBreak = do
   Break <$ reserved "break" <* semi <*> return pos
 
 simp :: Parser Simp
-simp = decl <|> try asign <|> (uncurry3 SimpCall <$> parseCall)
+simp = try decl <|> try asign <|> (uncurry3 SimpCall <$> parseCall)
 
 decl :: Parser Simp
 decl = do
