@@ -35,6 +35,7 @@ data Simp
 
 isDecl :: Simp -> Bool
 isDecl (Decl {}) = True
+isDecl (Init {}) = True
 isDecl _ = False
 
 data Expr
