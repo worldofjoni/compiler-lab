@@ -120,6 +120,10 @@ genStmt (SimpStmt (Asgn name (Just op) e _)) = do
   lhs <- lookupVar name
   x <- toOperand e
   emit $ lhs :<-+ (Reg lhs, op, x)
+-- tail call opt
+genStmt (Ret (Call label args _) _) = do
+  regs <- evalArgs args
+  emit $ CallTail label regs
 genStmt (Ret e _) = do
   x <- toOperand e
   emit $ Return x

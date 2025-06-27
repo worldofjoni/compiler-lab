@@ -124,6 +124,13 @@ genAsm sizes = unlines . (preamble :) . toList . fmap genIStmt
     genIStmt (FunctionLabel name) =
       unlines
         ["func_" ++ name ++ ":", "push %rbp", "mov %rsp, %rbp", "sub $" ++ (show . (* 4) . fromJust . Map.lookup name $ sizes) ++ ", %rsp"]
+    genIStmt (CallTail name regs) =
+      unlines $
+        ["push " ++ stackAddress r | r <- reverse regs]
+          ++ ["mov %rsp, %rax"]
+          ++ ["leave"]
+          ++ ["push " ++ show ((i * 8)) ++ "(%rax)" | i <- reverse [0 .. length regs - 1]]
+          ++ ["jmp func_" ++ name]
 
 genCompare :: String -> VRegister -> Operand -> Operand -> String
 genCompare setInst x a b =

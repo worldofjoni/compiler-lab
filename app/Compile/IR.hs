@@ -23,6 +23,7 @@ data IStmt
   | Goto Label
   | GotoIfNot Label Operand
   | CallIr (Maybe VRegister) Label [VRegister]
+  | CallTail Label [VRegister]
   | FunctionLabel Label
   | Nop
 
