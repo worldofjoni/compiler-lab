@@ -9,10 +9,10 @@ import Data.Maybe (fromJust)
 type Asm = String
 
 genAsm :: FrameSizes -> IR -> Asm
-genAsm sizes = unlines . (preamble :) . toList . fmap genIStmt
+genAsm sizes = undefined -- unlines . (preamble :) . toList . fmap genIStmt
   where
     genIStmt :: IStmt -> String
-    genIStmt (Label l) = unlines [l ++ ":"]
+    -- genIStmt (Label l) = unlines [l ++ ":"]
     genIStmt (Goto l) = unlines ["jmp " ++ l]
     genIStmt (GotoIfNot l b) = unlines [mov (showOperand b) "%ecx", "cmpl $0, %ecx", "je " ++ l]
     genIStmt (x :<- (Imm i)) = mov (decConst i) (stackAddress x)
@@ -121,9 +121,10 @@ genAsm sizes = unlines . (preamble :) . toList . fmap genIStmt
           ++ ["call func_" ++ name]
           ++ maybe [] (pure . mov "%eax" . stackAddress) mret
           ++ ["pop %rax" | _ <- regs]
-    genIStmt (FunctionLabel name) =
-      unlines
-        ["func_" ++ name ++ ":", "push %rbp", "mov %rsp, %rbp", "sub $" ++ (show . (* 4) . fromJust . Map.lookup name $ sizes) ++ ", %rsp"]
+
+-- genIStmt (FunctionLabel name) =
+-- unlines
+-- ["func_" ++ name ++ ":", "push %rbp", "mov %rsp, %rbp", "sub $" ++ (show . (* 4) . fromJust . Map.lookup name $ sizes) ++ ", %rsp"]
 
 genCompare :: String -> VRegister -> Operand -> Operand -> String
 genCompare setInst x a b =

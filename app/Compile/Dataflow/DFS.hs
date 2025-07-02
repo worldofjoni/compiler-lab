@@ -1,4 +1,4 @@
-module DFS (orderGraph) where
+module Compile.Dataflow.DFS (orderGraph) where
 
 import Compile.IR (BasicBlock (successors), IRBasicBlock, Label)
 import Control.Monad.State (State, evalState, gets, modify)

@@ -22,10 +22,10 @@ compile :: Job -> L1ExceptT ()
 compile job = do
   ast <- parseAST $ src job
   semanticAnalysis ast
-  let (ir, frameSizes) = translate ast
-  let asm = genAsm frameSizes ir
-  liftIO . putStrLn . enumLines $ asm
-  _ <- liftIO $ readProcess "gcc" ["-x", "assembler", "-", "-o", out job] asm
+  -- let (ir, frameSizes) = translate ast
+  -- let asm = genAsm frameSizes ir
+  -- liftIO . putStrLn . enumLines $ asm
+  -- _ <- liftIO $ readProcess "gcc" ["-x", "assembler", "-", "-o", out job] asm
   return ()
 
 enumLines :: String -> String
