@@ -106,7 +106,7 @@ genAsm sizes = unlines . (preamble :) . toList . fmap genIStmt
     genIStmt (x :<-+ (a, Gt, b)) = genCompare "setg" x a b
     -- logical
     genIStmt (_ :<-+ (_, And, _)) = error "logical and should have been eliminated by translate"
-    genIStmt (_ :<-+ (_, Or, _)) = error "logical and should have been eliminated by translate"
+    genIStmt (_ :<-+ (_, Or, _)) = error "logical or should have been eliminated by translate"
     genIStmt (Unary x Not a) =
       unlines
         [ mov (showOperand a) "%eax",
