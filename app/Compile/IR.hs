@@ -41,9 +41,3 @@ instance Show IStmt where
   show (Goto l) = "goto " ++ show l
   show (GotoIfNot l op) = "goto " ++ show l ++ " if not " ++ show op
   show (CallIr tgt l regs) = maybe "" ((++ " <- ") . show . Reg) tgt ++ "call " ++ l ++ "(" ++ (intercalate ", " . map show) regs ++ ")"
-<<<<<<< Updated upstream
-  show (FunctionLabel label) = label ++ ":"
-
-=======
-  show (CallTail l regs) = "tail_call " ++ l ++ "(" ++ (intercalate ", " . map show) regs ++ ")"
->>>>>>> Stashed changes
