@@ -7,7 +7,9 @@ where
 
 import Compile.AST
 import Compile.IR
+import Control.Monad (zipWithM_)
 import Control.Monad.State
+import Data.Foldable (traverse_)
 import qualified Data.Map as Map
 
 type VarName = String
@@ -22,21 +24,13 @@ data TranslateState = TranslateState
     nextLabelNo :: Integer,
     loopEnds :: [Label],
     loopContinues :: [Label],
-    code :: IR
+    code :: Map.Map Label IRBasicBlock,
+    currentLines :: [IStmt],
+    currentLabel :: Label
   }
 
-translate :: AST -> (IR, FrameSizes)
-translate fs = (\(a, s) -> (code s, Map.fromList a)) $ runState (mapM genFunct fs) initialState
-  where
-    initialState =
-      TranslateState
-        { regMap = Map.empty,
-          nextReg = 0,
-          nextLabelNo = 0,
-          loopEnds = [],
-          loopContinues = [],
-          code = []
-        }
+translate :: AST -> IR
+translate = map genFunct
 
 freshReg :: Translate VRegister
 freshReg = do
@@ -69,7 +63,12 @@ lookupVar name = do
     Nothing -> error "unreachable, fix your semantic analysis I guess"
 
 emit :: IStmt -> Translate ()
-emit instr = modify $ \s -> s {code = code s ++ [instr]}
+emit instr = modify $ \s -> s {currentLines = currentLines s ++ [instr]}
+
+commitAndNew :: [Label] -> Label -> Translate ()
+commitAndNew succs newLabel = modify $ \s -> s {currentLines = [], currentLabel = newLabel, code = Map.insert (currentLabel s) (newBlock s) (code s)}
+  where
+    newBlock s = BasicBlock {Compile.IR.lines = currentLines s, successors = succs}
 
 pushLoopEnd :: Label -> Translate ()
 pushLoopEnd l = modify $ \s -> s {loopEnds = l : loopEnds s}
@@ -83,22 +82,30 @@ pushLoopContinue l = modify $ \s -> s {loopContinues = l : loopContinues s}
 popLoopContinue :: () -> Translate ()
 popLoopContinue () = modify $ \s -> s {loopContinues = tail $ loopContinues s}
 
-resetRegs :: Translate ()
-resetRegs =
-  modify (\s -> s {regMap = Map.empty, nextReg = 0})
+-- -----------------------------------------------------------
 
-genFunct :: Function -> Translate (String, VRegister)
-genFunct (Func _ name params block _) = do
-  resetRegs
-  mapM_
-    ( \((_, pname), reg) -> do
-        assignVar pname reg
-    )
-    . zip params
-    $ [-1, -2 ..]
-  emit $ FunctionLabel name
-  genBlock block
-  gets ((name,) . nextReg)
+genFunct :: Function -> IRFunc
+genFunct (Func _ name params block _) =
+  (name,) . code $
+    execState
+      ( do
+          zipWithM_
+            (\(_, pname) reg -> pure (assignVar pname reg))
+            params
+            [-1, -2 ..]
+          genBlock block
+          commitAndNew [] ""
+      )
+      TranslateState
+        { regMap = Map.empty,
+          nextReg = 0,
+          nextLabelNo = 0,
+          loopEnds = [],
+          loopContinues = [],
+          code = Map.empty,
+          currentLines = [],
+          currentLabel = name
+        }
 
 -- todo
 
@@ -126,59 +133,66 @@ genStmt (Ret e _) = do
 genStmt (If condition thenStmt (Just elseStmt) _) = do
   o <- toOperand condition
   elseLabel <- freshLabelWithPrefix "else"
+  thenLabel <- freshLabelWithPrefix "then"
   endLabel <- freshLabelWithPrefix "endif"
   emit $ GotoIfNot elseLabel o
+  commitAndNew [thenLabel, elseLabel] thenLabel
   genStmt thenStmt
   emit $ Goto endLabel
-  emit $ Label elseLabel
+  commitAndNew [endLabel] elseLabel
   genStmt elseStmt
-  emit $ Label endLabel
+  commitAndNew [endLabel] endLabel
 genStmt (If condition thenStmt Nothing _) = do
   o <- toOperand condition
   endLabel <- freshLabelWithPrefix "endif"
+  thenLabel <- freshLabelWithPrefix "then"
   emit $ GotoIfNot endLabel o
+  commitAndNew [thenLabel, endLabel] thenLabel
   genStmt thenStmt
-  emit $ Label endLabel
+  commitAndNew [endLabel] endLabel
 genStmt (While condition body _) = do
   loopLabel <- freshLabelWithPrefix "loop"
+  loopCond <- freshLabelWithPrefix "loopCond"
   endLabel <- freshLabelWithPrefix "endloop"
-  emit $ Label loopLabel
+  commitAndNew [loopCond] loopCond
   o <- toOperand condition
   emit $ GotoIfNot endLabel o
+  commitAndNew [endLabel, loopLabel] loopLabel
   pushLoopEnd endLabel
   pushLoopContinue loopLabel
   genStmt body
   popLoopEnd ()
   popLoopContinue ()
   emit $ Goto loopLabel
-  emit $ Label endLabel
+  commitAndNew [loopLabel] endLabel
 genStmt (For initSimp condition after body _) = do
   loopLabel <- freshLabelWithPrefix "loop"
+  loopCondLabel <- freshLabelWithPrefix "condloop"
   endLabel <- freshLabelWithPrefix "endloop"
   continueLabel <- freshLabelWithPrefix "continueloop"
   maybeGenSimp initSimp
-  emit $ Label loopLabel
-  pushLoopContinue continueLabel
-  pushLoopEnd endLabel
+  commitAndNew [loopCondLabel] loopCondLabel
   o <- toOperand condition
   emit $ GotoIfNot endLabel o
+  commitAndNew [loopLabel, endLabel] loopLabel
+  pushLoopContinue continueLabel
+  pushLoopEnd endLabel
   genStmt body
-  emit $ Label continueLabel
+  commitAndNew [continueLabel] continueLabel
   maybeGenSimp after
-  emit $ Goto loopLabel
-  emit $ Label endLabel
   popLoopContinue ()
   popLoopEnd ()
+  emit $ Goto loopLabel
+  commitAndNew [loopLabel, endLabel] endLabel
 genStmt (Break _) = do
-  curr <- get
-  emit . Goto . head . loopEnds $ curr
+  end <- gets (head . loopEnds)
+  emit . Goto $ end
+  commitAndNew [end] ""
 genStmt (Continue _) = do
-  curr <- get
-  emit . Goto . head . loopContinues $ curr
-genStmt (BlockStmt [] _) = pure ()
-genStmt (BlockStmt (x : xs) sourcePos) = do
-  genStmt x
-  genStmt (BlockStmt xs sourcePos)
+  cont <- gets (head . loopContinues)
+  emit . Goto $ cont
+  commitAndNew [cont] ""
+genStmt (BlockStmt ss _) = traverse_ genStmt ss
 genStmt (SimpStmt (SimpCall name args _)) = do
   opsRegs <-
     evalArgs args
@@ -231,25 +245,29 @@ assignTo d (UnExpr op e) = do
 assignTo d (BinExpr e1 And e2) = do
   shortLabel <- freshLabelWithPrefix "short"
   endLabel <- freshLabelWithPrefix "endshort"
+  sndLabel <- freshLabelWithPrefix "snd"
   x1 <- toOperand e1
   emit $ GotoIfNot shortLabel x1
+  commitAndNew [sndLabel, shortLabel] sndLabel
   x2 <- toOperand e2
   emit $ d :<- x2
   emit $ Goto endLabel
-  emit $ Label shortLabel
+  commitAndNew [endLabel] shortLabel
   emit $ d :<- Imm 0
-  emit $ Label endLabel
+  commitAndNew [endLabel] endLabel
 assignTo d (BinExpr e1 Or e2) = do
   longLabel <- freshLabelWithPrefix "long"
   endLabel <- freshLabelWithPrefix "endlong"
+  sndLabel <- freshLabelWithPrefix "snd"
   x1 <- toOperand e1
   emit $ GotoIfNot longLabel x1
+  commitAndNew [sndLabel, longLabel] sndLabel
   emit $ d :<- Imm 1
   emit $ Goto endLabel
-  emit $ Label longLabel
+  commitAndNew [endLabel] longLabel
   x2 <- toOperand e2
   emit $ d :<- x2
-  emit $ Label endLabel
+  commitAndNew [endLabel] endLabel
 assignTo d (BinExpr e1 op e2) = do
   x1 <- toOperand e1
   x2 <- toOperand e2
@@ -257,13 +275,15 @@ assignTo d (BinExpr e1 op e2) = do
 assignTo d (Ternary condition thenExpr elseExpr) = do
   elseLabel <- freshLabelWithPrefix "else"
   endLabel <- freshLabelWithPrefix "endif"
+  thenLabel <- freshLabelWithPrefix "then"
   o <- toOperand condition
   emit $ GotoIfNot elseLabel o
+  commitAndNew [thenLabel, elseLabel] thenLabel
   assignTo d thenExpr
   emit $ Goto endLabel
-  emit $ Label elseLabel
+  commitAndNew [endLabel] elseLabel
   assignTo d elseExpr
-  emit $ Label endLabel
+  commitAndNew [endLabel] endLabel
 assignTo d (Call name args _) = do
   regs <- evalArgs args
   emit $ CallIr (Just d) name regs
