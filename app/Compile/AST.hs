@@ -1,5 +1,6 @@
 module Compile.AST where
 
+import Data.List (intercalate)
 import Text.Megaparsec
 
 type AST = Program
@@ -8,6 +9,9 @@ type Program = [Function]
 
 data Function = Func Type String [(Type, String)] Block SourcePos
 
+instance Show Function where
+  show (Func ty name params code _) = show ty ++ " " ++ name ++ "(" ++ intercalate ", " (map show params) ++ ")\n" ++ show code
+
 type Block = [Stmt]
 
 data Type = IntType | BoolType deriving (Eq)
@@ -15,7 +19,6 @@ data Type = IntType | BoolType deriving (Eq)
 instance Show Type where
   show IntType = "int"
   show BoolType = "bool"
-
 
 data Stmt
   = SimpStmt Simp
@@ -26,12 +29,14 @@ data Stmt
   | Break SourcePos
   | Continue SourcePos
   | Ret Expr SourcePos
+  deriving (Show)
 
 data Simp
   = Decl Type String SourcePos
   | Init Type String Expr SourcePos
   | Asgn String AsgnOp Expr SourcePos
   | SimpCall String [Expr] SourcePos
+  deriving (Show)
 
 isDecl :: Simp -> Bool
 isDecl (Decl {}) = True
@@ -46,6 +51,7 @@ data Expr
   | UnExpr UnOp Expr
   | Ternary Expr Expr Expr
   | Call String [Expr] SourcePos
+  deriving (Show)
 
 -- Nothing means =, Just is for +=, %=, ...
 type AsgnOp = Maybe Op

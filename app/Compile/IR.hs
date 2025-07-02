@@ -1,3 +1,6 @@
+{-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE NamedFieldPuns #-}
+
 module Compile.IR where
 
 import Compile.AST (Op, UnOp)
@@ -13,7 +16,16 @@ type FrameSizes = Map.Map Label Int
 type IR = [IRFunc]
 
 type IRFunc = (String, Map.Map Label IRBasicBlock)
+
+showIRFunc :: IRFunc -> [Char]
+showIRFunc (name, blocks) = "function " ++ name ++ ":\n" ++ (unlines . map (\(n, l) -> "==> " ++ n ++ ":\n" ++ show l) . Map.toList) blocks
+
 data BasicBlock line = BasicBlock {lines :: [line], successors :: [Label]}
+
+instance (Show l) => Show (BasicBlock l) where
+  show :: (Show l) => BasicBlock l -> String
+  show (BasicBlock lns suc) = (unlines . map show $ lns) ++ "\nSuccs:\n" ++ show suc ++ "\n\n"
+
 type IRBasicBlock = BasicBlock IStmt
 
 data Operand = Reg VRegister | Imm Integer
@@ -22,6 +34,7 @@ data IStmt
   = Return Operand
   | VRegister :<- Operand
   | VRegister :<-+ (Operand, Op, Operand)
+  | Phi VRegister [Operand]
   | Unary VRegister UnOp Operand
   | Goto Label
   | GotoIfNot Label Operand
@@ -40,4 +53,5 @@ instance Show IStmt where
   show Nop = "nop"
   show (Goto l) = "goto " ++ show l
   show (GotoIfNot l op) = "goto " ++ show l ++ " if not " ++ show op
-  show (CallIr tgt l regs) = maybe "" ((++ " <- ") . show . Reg) tgt ++ "call " ++ l ++ "(" ++ (intercalate ", " . map show) regs ++ ")"
+  show (CallIr tgt l regs) = maybe "" ((++ " <- ") . show . Reg) tgt ++ "call " ++ l ++ "(" ++ (intercalate ", " . map (show . Reg)) regs ++ ")"
+  show (Phi tgt ls) = show tgt ++ " <- Φ(" ++ intercalate ", " (map show ls) ++ ")"

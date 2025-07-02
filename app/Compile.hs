@@ -5,6 +5,7 @@ module Compile
 where
 
 import Compile.CodeGen (genAsm)
+import Compile.IR (showIRFunc)
 import Compile.Parser (parseAST)
 import Compile.Semantic (semanticAnalysis)
 import Compile.Translate (translate)
@@ -22,7 +23,9 @@ compile :: Job -> L1ExceptT ()
 compile job = do
   ast <- parseAST $ src job
   semanticAnalysis ast
-  -- let (ir, frameSizes) = translate ast
+  -- liftIO . print $ ast
+  let ir = translate ast
+  liftIO . putStrLn . unlines . map showIRFunc $ ir
   -- let asm = genAsm frameSizes ir
   -- liftIO . putStrLn . enumLines $ asm
   -- _ <- liftIO $ readProcess "gcc" ["-x", "assembler", "-", "-o", out job] asm

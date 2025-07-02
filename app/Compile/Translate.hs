@@ -159,12 +159,12 @@ genStmt (While condition body _) = do
   emit $ GotoIfNot endLabel o
   commitAndNew [endLabel, loopLabel] loopLabel
   pushLoopEnd endLabel
-  pushLoopContinue loopLabel
+  pushLoopContinue loopCond
   genStmt body
   popLoopEnd ()
   popLoopContinue ()
-  emit $ Goto loopLabel
-  commitAndNew [loopLabel] endLabel
+  emit $ Goto loopCond
+  commitAndNew [loopCond] endLabel
 genStmt (For initSimp condition after body _) = do
   loopLabel <- freshLabelWithPrefix "loop"
   loopCondLabel <- freshLabelWithPrefix "condloop"
