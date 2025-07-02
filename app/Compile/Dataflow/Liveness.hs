@@ -2,7 +2,6 @@
 
 module Compile.Dataflow.Liveness where
 
-import Compile.Dataflow.DFS (orderGraph)
 import Compile.IR
 import Control.Monad
 import Control.Monad.State
@@ -23,16 +22,16 @@ data LivenessState t = LivenessState
     liveAfter :: Map.Map Label (LiveVars t)
   }
 
-addLiveness :: IRFunc -> LivenessFunc
+addLiveness :: (Ord t) => BBFunc (IStmt t) -> LivenessFunc t
 addLiveness (name, bs) =
   ( name,
-    blocks $ execState (updateAllUntilConvergence order) initalState
+    blocks $ execState (updateAllUntilConvergence order) initialState
   )
   where
-    order = orderGraph bs (head . Map.keys $ bs)
+    order = Map.keys  bs
     emptyLiveVars = Map.fromList . map (,Set.empty) . Map.keys $ bs
-    addEmptyLiveVars b = b {Compile.IR.lines = map (,Set.empty) $ Compile.IR.lines b}
-    initalState = LivenessState {blocks = fmap addEmptyLiveVars bs, liveAfter = emptyLiveVars, liveBefore = emptyLiveVars}
+    addEmptyLiveVars b = BasicBlock {Compile.IR.lines = map (,Set.empty) (Compile.IR.lines b), successors = successors b}
+    initialState = LivenessState {blocks = fmap addEmptyLiveVars bs, liveAfter = emptyLiveVars, liveBefore = emptyLiveVars}
 
 updateAllUntilConvergence :: (Ord t) => [Label] -> Liveness t ()
 updateAllUntilConvergence order = do
@@ -76,6 +75,7 @@ nowLive (Goto _) = id
 nowLive (GotoIfNot _ _) = id
 nowLive (Return (Imm _)) = const Set.empty
 nowLive (Return (Reg x)) = const $ Set.singleton x
+nowLive (Phi _ _) = error "todo: how does Phi affect liveness"
 
 changeIfReg :: (Ord t) => (t -> LiveVars t -> LiveVars t) -> Operand t -> LiveVars t -> LiveVars t
 changeIfReg f (Reg x) = f x
