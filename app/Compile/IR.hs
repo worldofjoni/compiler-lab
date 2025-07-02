@@ -35,9 +35,11 @@ instance Show IStmt where
   show (r :<- s) = show (Reg r) ++ " <- " ++ show s
   show (r :<-+ (s1, op, s2)) = show (Reg r) ++ " <- " ++ show s1 ++ " " ++ show op ++ " " ++ show s2
   show (Unary r op s) = show (Reg r) ++ " <- " ++ show op ++ show s
+  show (Label l) = l ++ ":"
   show Nop = "nop"
   show (Goto l) = "goto " ++ show l
   show (GotoIfNot l op) = "goto " ++ show l ++ " if not " ++ show op
-  show (Label l) = l ++ ":"
   show (CallIr tgt l regs) = maybe "" ((++ " <- ") . show . Reg) tgt ++ "call " ++ l ++ "(" ++ (intercalate ", " . map show) regs ++ ")"
+  show (CallTail l regs) = "tail_call " ++ l ++ "(" ++ (intercalate ", " . map show) regs ++ ")"
   show (FunctionLabel label) = label ++ ":"
+
