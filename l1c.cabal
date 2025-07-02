@@ -41,6 +41,7 @@ executable l1c
                   Compile.Translate,
                   Compile.CodeGen,
                   Compile.IR,
+                  Compile.RegAlloc,
                   Error
     hs-source-dirs:   app
     default-language: Haskell2010
