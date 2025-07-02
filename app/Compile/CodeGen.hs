@@ -1,17 +1,18 @@
 module Compile.CodeGen (genAsm) where
 
 import Compile.AST (Op (..), UnOp (..))
-import Compile.IR (FrameSizes, IR, IStmt (..), Operand (..), VRegister)
+import Compile.IR (FrameSizes, IR, IStmt (..), NameOrReg, Operand (..), VRegister)
 import Data.Foldable (Foldable (toList))
 import qualified Data.Map as Map
 import Data.Maybe (fromJust)
+import GHC.Base (RuntimeRep (VecRep))
 
 type Asm = String
 
 genAsm :: FrameSizes -> IR -> Asm
 genAsm sizes = undefined -- unlines . (preamble :) . toList . fmap genIStmt
   where
-    genIStmt :: IStmt -> String
+    genIStmt :: IStmt VRegister -> String
     -- genIStmt (Label l) = unlines [l ++ ":"]
     genIStmt (Goto l) = unlines ["jmp " ++ l]
     genIStmt (GotoIfNot l b) = unlines [mov (showOperand b) "%ecx", "cmpl $0, %ecx", "je " ++ l]
@@ -126,7 +127,7 @@ genAsm sizes = undefined -- unlines . (preamble :) . toList . fmap genIStmt
 -- unlines
 -- ["func_" ++ name ++ ":", "push %rbp", "mov %rsp, %rbp", "sub $" ++ (show . (* 4) . fromJust . Map.lookup name $ sizes) ++ ", %rsp"]
 
-genCompare :: String -> VRegister -> Operand -> Operand -> String
+genCompare :: String -> VRegister -> Operand VRegister -> Operand VRegister -> String
 genCompare setInst x a b =
   unlines
     [ mov (showOperand a) "%eax",
@@ -141,7 +142,7 @@ stackAddress reg
   | reg >= 0 = show (-((reg + 1) * 4)) ++ "(%rbp)" -- current stack frame: skip previous base pointer
   | otherwise = show (-((reg + 1) * 8) + 16) ++ "(%rbp)" -- function parameters: previous frame: skip return address; paramerers are pused as 8 byte..
 
-showOperand :: Operand -> String
+showOperand :: Operand VRegister -> String
 showOperand (Imm a) = decConst a
 showOperand (Reg r) = stackAddress r
 

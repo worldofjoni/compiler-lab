@@ -11,6 +11,8 @@ type VRegister = Int -- virtual register
 
 type Label = String
 
+type VarName = String
+
 type FrameSizes = Map.Map Label Int
 
 type IR = [IRFunc]
@@ -26,26 +28,28 @@ instance (Show l) => Show (BasicBlock l) where
   show :: (Show l) => BasicBlock l -> String
   show (BasicBlock lns suc) = (unlines . map show $ lns) ++ "\nSuccs:\n" ++ show suc ++ "\n\n"
 
-type IRBasicBlock = BasicBlock IStmt
+type NameOrReg = Either VarName VRegister
 
-data Operand = Reg VRegister | Imm Integer
+type IRBasicBlock = BasicBlock (IStmt NameOrReg)
 
-data IStmt
-  = Return Operand
-  | VRegister :<- Operand
-  | VRegister :<-+ (Operand, Op, Operand)
-  | Phi VRegister [Operand]
-  | Unary VRegister UnOp Operand
+data Operand a = Reg a | Imm Integer
+
+data IStmt a
+  = Return (Operand a)
+  | a :<- (Operand a)
+  | a :<-+ (Operand a, Op, Operand a)
+  | Phi a [Operand a]
+  | Unary a UnOp (Operand a)
   | Goto Label
-  | GotoIfNot Label Operand
-  | CallIr (Maybe VRegister) Label [VRegister]
+  | GotoIfNot Label (Operand a)
+  | CallIr (Maybe a) Label [a]
   | Nop
 
-instance Show Operand where
-  show (Reg r) = "vreg" ++ show r
-  show (Imm n) = show n
+instance (Show a) => Show (Operand a) where
+  show (Reg r) = "reg." ++ show r
+  show (Imm n) = "imm." ++ show n
 
-instance Show IStmt where
+instance (Show a) => Show (IStmt a) where
   show (Return op) = "ret " ++ show op
   show (r :<- s) = show (Reg r) ++ " <- " ++ show s
   show (r :<-+ (s1, op, s2)) = show (Reg r) ++ " <- " ++ show s1 ++ " " ++ show op ++ " " ++ show s2

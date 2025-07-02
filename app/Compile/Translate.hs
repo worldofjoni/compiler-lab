@@ -7,25 +7,19 @@ where
 
 import Compile.AST
 import Compile.IR
-import Control.Monad (zipWithM_)
 import Control.Monad.State
 import Data.Foldable (traverse_)
 import qualified Data.Map as Map
 
-type VarName = String
-
-type AAsmAlloc = Map.Map VarName VRegister
-
 type Translate a = State TranslateState a
 
 data TranslateState = TranslateState
-  { regMap :: AAsmAlloc,
-    nextReg :: VRegister,
+  { nextReg :: VRegister,
     nextLabelNo :: Integer,
     loopEnds :: [Label],
     loopContinues :: [Label],
     code :: Map.Map Label IRBasicBlock,
-    currentLines :: [IStmt],
+    currentLines :: [IStmt NameOrReg],
     currentLabel :: Label
   }
 
@@ -51,18 +45,7 @@ freshLabelWithPrefix prefix = do
   l <- freshLabel
   return $ prefix ++ l
 
-assignVar :: VarName -> VRegister -> Translate ()
-assignVar name r = do
-  modify $ \s -> s {regMap = Map.insert name r (regMap s)}
-
-lookupVar :: VarName -> Translate VRegister
-lookupVar name = do
-  m <- gets regMap
-  case Map.lookup name m of
-    Just r -> return r
-    Nothing -> error "unreachable, fix your semantic analysis I guess"
-
-emit :: IStmt -> Translate ()
+emit :: IStmt NameOrReg -> Translate ()
 emit instr = modify $ \s -> s {currentLines = currentLines s ++ [instr]}
 
 commitAndNew :: [Label] -> Label -> Translate ()
@@ -85,20 +68,15 @@ popLoopContinue () = modify $ \s -> s {loopContinues = tail $ loopContinues s}
 -- -----------------------------------------------------------
 
 genFunct :: Function -> IRFunc
-genFunct (Func _ name params block _) =
+genFunct (Func _ name _ block _) =
   (name,) . code $
     execState
       ( do
-          zipWithM_
-            (\(_, pname) reg -> pure (assignVar pname reg))
-            params
-            [-1, -2 ..]
           genBlock block
           commitAndNew [] ""
       )
       TranslateState
-        { regMap = Map.empty,
-          nextReg = 0,
+        { nextReg = 0,
           nextLabelNo = 0,
           loopEnds = [],
           loopContinues = [],
@@ -113,20 +91,15 @@ genBlock :: [Stmt] -> Translate ()
 genBlock = mapM_ genStmt
 
 genStmt :: Stmt -> Translate ()
-genStmt (SimpStmt (Decl _ name _)) = do
-  r <- freshReg
-  assignVar name r
+genStmt (SimpStmt (Decl {})) = do
+  pure ()
 genStmt (SimpStmt (Init _ name e _)) = do
-  r <- freshReg
-  assignTo r e
-  assignVar name r
+  assignTo (Left name) e
 genStmt (SimpStmt (Asgn name Nothing e _)) = do
-  lhs <- lookupVar name
-  assignTo lhs e
+  assignTo (Left name) e
 genStmt (SimpStmt (Asgn name (Just op) e _)) = do
-  lhs <- lookupVar name
   x <- toOperand e
-  emit $ lhs :<-+ (Reg lhs, op, x)
+  emit $ Left name :<-+ (Reg (Left name), op, x)
 genStmt (Ret e _) = do
   x <- toOperand e
   emit $ Return x
@@ -198,13 +171,13 @@ genStmt (SimpStmt (SimpCall name args _)) = do
     evalArgs args
   emit $ CallIr Nothing name opsRegs
 
-evalArgs :: [Expr] -> Translate [VRegister]
+evalArgs :: [Expr] -> Translate [NameOrReg]
 evalArgs =
   mapM
     ( \e -> do
         reg <- freshReg
-        assignTo reg e
-        pure reg
+        assignTo (Right reg) e
+        pure (Right reg)
     )
 
 maybeGenStmt :: Maybe Stmt -> Translate ()
@@ -216,29 +189,27 @@ maybeGenStmt (Just s) = do
 maybeGenSimp :: Maybe Simp -> Translate ()
 maybeGenSimp = maybeGenStmt . fmap SimpStmt
 
-toOperand :: Expr -> Translate Operand
+toOperand :: Expr -> Translate (Operand NameOrReg)
 toOperand (IntExpr n _) = pure . Imm . read $ n
 toOperand (BoolExpr b _) = pure . Imm . boolToInt $ b
 toOperand (IdentExpr name _) = do
-  r <- lookupVar name
-  return $ Reg r
+  return . Reg . Left $ name
 toOperand e = do
   t <- freshReg
-  assignTo t e
-  return $ Reg t
+  assignTo (Right t) e
+  return . Reg . Right $ t
 
 boolToInt :: Bool -> Integer
 boolToInt True = 1
 boolToInt False = 0
 
-assignTo :: VRegister -> Expr -> Translate ()
+assignTo :: NameOrReg -> Expr -> Translate ()
 assignTo d (IntExpr n _) = do
   emit $ d :<- Imm (read n)
 assignTo d (BoolExpr b _) = do
   emit $ d :<- Imm (boolToInt b)
 assignTo d (IdentExpr name _) = do
-  r <- lookupVar name
-  emit $ d :<- Reg r
+  emit $ d :<- Reg (Left name)
 assignTo d (UnExpr op e) = do
   x <- toOperand e
   emit $ Unary d op x

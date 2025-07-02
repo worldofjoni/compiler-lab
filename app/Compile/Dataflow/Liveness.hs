@@ -7,24 +7,24 @@ import qualified Data.Map as Map
 import Data.Maybe (fromJust)
 import qualified Data.Set as Set
 
-type LiveVars = Set.Set VRegister
+type LiveVars t = Set.Set t
 
-type LivenessBlock = BasicBlock (IStmt, LiveVars)
+type LivenessBlock t = BasicBlock (IStmt t, LiveVars t)
 
-type Liveness a = State LivenessState a
+type Liveness t a = State (LivenessState t) a
 
-data LivenessState = LivenessState
-  { blocks :: Map.Map Label LivenessBlock,
-    liveBefore :: Map.Map Label LiveVars,
-    liveAfter :: Map.Map Label LiveVars
+data LivenessState t = LivenessState
+  { blocks :: Map.Map Label (LivenessBlock t),
+    liveBefore :: Map.Map Label (LiveVars t),
+    liveAfter :: Map.Map Label (LiveVars t)
   }
 
-updateAllUntilConvergence :: [Label] -> Liveness ()
+updateAllUntilConvergence :: (Ord t) => [Label] -> Liveness t ()
 updateAllUntilConvergence order = do
   changed <- mapM update order
   Control.Monad.when (or changed) $ updateAllUntilConvergence order
 
-update :: Label -> Liveness Bool
+update :: (Ord t) => Label -> Liveness t Bool
 update l = do
   curr <- get
   let b = fromJust . Map.lookup l . blocks $ curr
@@ -43,13 +43,13 @@ update l = do
       put curr {liveAfter = Map.insert l (head lineLivenesses) (liveAfter curr)}
       return True
 
-localLiveness :: LiveVars -> [IStmt] -> [LiveVars]
+localLiveness :: (Ord t) => LiveVars t -> [IStmt t] -> [LiveVars t]
 localLiveness inital = foldr f []
   where
     f stmt [] = [nowLive stmt inital]
     f stmt acc = (nowLive stmt . head $ acc) : acc
 
-nowLive :: IStmt -> LiveVars -> LiveVars
+nowLive :: (Ord t) => IStmt t -> LiveVars t -> LiveVars t
 nowLive (x :<- Imm _) = Set.delete x
 nowLive (x :<- Reg y) = Set.insert y . Set.delete x
 nowLive (x :<-+ (a, _, b)) = insertIfReg a . insertIfReg b . Set.delete x
@@ -62,12 +62,12 @@ nowLive (GotoIfNot _ _) = id
 nowLive (Return (Imm _)) = const Set.empty
 nowLive (Return (Reg x)) = const $ Set.singleton x
 
-changeIfReg :: (VRegister -> LiveVars -> LiveVars) -> Operand -> LiveVars -> LiveVars
+changeIfReg :: (Ord t) => (t -> LiveVars t -> LiveVars t) -> Operand t -> LiveVars t -> LiveVars t
 changeIfReg f (Reg x) = f x
 changeIfReg _ (Imm _) = id
 
-deleteIfReg :: Operand -> LiveVars -> LiveVars
+deleteIfReg :: (Ord t) => Operand t -> LiveVars t -> LiveVars t
 deleteIfReg = changeIfReg Set.delete
 
-insertIfReg :: Operand -> LiveVars -> LiveVars
+insertIfReg :: (Ord t) => Operand t -> LiveVars t -> LiveVars t
 insertIfReg = changeIfReg Set.insert
