@@ -30,6 +30,7 @@ instance (Show l) => Show (BasicBlock l) where
 
 type NameOrReg = Either VarName VRegister
 
+type BBFunc line = (String, Map.Map Label (BasicBlock line))
 type IRBasicBlock = BasicBlock (IStmt NameOrReg)
 
 data Operand a = Reg a | Imm Integer

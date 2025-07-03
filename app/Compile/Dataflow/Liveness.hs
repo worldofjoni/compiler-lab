@@ -1,5 +1,8 @@
+{-# LANGUAGE TupleSections #-}
+
 module Compile.Dataflow.Liveness where
 
+import Compile.Dataflow.DFS (orderGraph)
 import Compile.IR
 import Control.Monad
 import Control.Monad.State
@@ -10,6 +13,7 @@ import qualified Data.Set as Set
 type LiveVars t = Set.Set t
 
 type LivenessBlock t = BasicBlock (IStmt t, LiveVars t)
+type LivenessFunc t = BBFunc (IStmt t, LiveVars t)
 
 type Liveness t a = State (LivenessState t) a
 
@@ -18,6 +22,17 @@ data LivenessState t = LivenessState
     liveBefore :: Map.Map Label (LiveVars t),
     liveAfter :: Map.Map Label (LiveVars t)
   }
+
+addLiveness :: IRFunc -> LivenessFunc
+addLiveness (name, bs) =
+  ( name,
+    blocks $ execState (updateAllUntilConvergence order) initalState
+  )
+  where
+    order = orderGraph bs (head . Map.keys $ bs)
+    emptyLiveVars = Map.fromList . map (,Set.empty) . Map.keys $ bs
+    addEmptyLiveVars b = b {Compile.IR.lines = map (,Set.empty) $ Compile.IR.lines b}
+    initalState = LivenessState {blocks = fmap addEmptyLiveVars bs, liveAfter = emptyLiveVars, liveBefore = emptyLiveVars}
 
 updateAllUntilConvergence :: (Ord t) => [Label] -> Liveness t ()
 updateAllUntilConvergence order = do
