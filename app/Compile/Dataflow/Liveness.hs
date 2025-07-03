@@ -8,6 +8,7 @@ import Control.Monad.State
 import qualified Data.Map as Map
 import Data.Maybe (fromJust)
 import qualified Data.Set as Set
+import Compile.Dataflow.DFS (orderGraph)
 
 type LiveVars t = Set.Set t
 
@@ -29,7 +30,7 @@ addLiveness (name, bs) =
       blocks $ execState (updateAllUntilConvergence order) initialState
     )
   where
-    order = Map.keys  bs
+    order = orderGraph bs name
     addEmptyLiveVars b = b {Compile.IR.lines = map (,Set.empty) $ Compile.IR.lines b}
     initialState = LivenessState {blocks = fmap addEmptyLiveVars bs, cashedInputs = Map.empty}
 
@@ -87,9 +88,6 @@ nowLive (Phi _ _) = error "todo: how does Phi impact liveness??"
 changeIfReg :: (Ord t) => (t -> LiveVars t -> LiveVars t) -> Operand t -> LiveVars t -> LiveVars t
 changeIfReg f (Reg x) = f x
 changeIfReg _ (Imm _) = id
-
-deleteIfReg :: (Ord t) => Operand t -> LiveVars t -> LiveVars t
-deleteIfReg = changeIfReg Set.delete
 
 insertIfReg :: (Ord t) => Operand t -> LiveVars t -> LiveVars t
 insertIfReg = changeIfReg Set.insert
