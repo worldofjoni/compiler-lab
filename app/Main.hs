@@ -2,9 +2,8 @@ module Main where
 
 import Args (jobParser, validateJob)
 import Compile (compile)
-import Error (dieWithError)
-
 import Control.Monad.Except (runExceptT)
+import Error (dieWithError)
 import Options.Applicative (execParser)
 
 main :: IO ()

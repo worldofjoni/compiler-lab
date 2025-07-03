@@ -5,6 +5,7 @@ module Compile
 where
 
 import Compile.CodeGen (genAsm)
+import Compile.Dataflow.Liveness (addLiveness)
 import Compile.IR (showIRFunc)
 import Compile.Parser (parseAST)
 import Compile.Semantic (semanticAnalysis)
@@ -25,7 +26,7 @@ compile job = do
   semanticAnalysis ast
   -- liftIO . print $ ast
   let ir = translate ast
-  liftIO . putStrLn . unlines . map showIRFunc $ ir
+  liftIO . putStrLn . unlines . map (showIRFunc . addLiveness) $ ir
   -- let asm = genAsm frameSizes ir
   -- liftIO . putStrLn . enumLines $ asm
   -- _ <- liftIO $ readProcess "gcc" ["-x", "assembler", "-", "-o", out job] asm

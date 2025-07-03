@@ -19,7 +19,7 @@ type IR = [IRFunc]
 
 type IRFunc = (String, Map.Map Label IRBasicBlock)
 
-showIRFunc :: IRFunc -> [Char]
+showIRFunc :: (Show l) => BBFunc l -> [Char]
 showIRFunc (name, blocks) = "function " ++ name ++ ":\n" ++ (unlines . map (\(n, l) -> "==> " ++ n ++ ":\n" ++ show l) . Map.toList) blocks
 
 data BasicBlock line = BasicBlock {lines :: [line], successors :: [Label]}

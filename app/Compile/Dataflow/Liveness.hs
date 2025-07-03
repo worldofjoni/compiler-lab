@@ -1,6 +1,6 @@
 {-# LANGUAGE TupleSections #-}
 
-module Compile.Dataflow.Liveness where
+module Compile.Dataflow.Liveness (LiveVars, LivenessBlock, LivenessFunc, addLiveness) where
 
 import Compile.IR
 import Control.Monad
@@ -15,23 +15,24 @@ type LivenessBlock t = BasicBlock (IStmt t, LiveVars t)
 type LivenessFunc t = BBFunc (IStmt t, LiveVars t)
 
 type Liveness t a = State (LivenessState t) a
+ 
 
 data LivenessState t = LivenessState
   { blocks :: Map.Map Label (LivenessBlock t),
-    liveBefore :: Map.Map Label (LiveVars t),
-    liveAfter :: Map.Map Label (LiveVars t)
+    cashedInputs :: Map.Map Label (LiveVars t)
   }
+  deriving (Show)
 
 addLiveness :: (Ord t) => BBFunc (IStmt t) -> LivenessFunc t
 addLiveness (name, bs) =
-  ( name,
-    blocks $ execState (updateAllUntilConvergence order) initialState
-  )
+    ( name,
+      blocks $ execState (updateAllUntilConvergence order) initialState
+    )
   where
     order = Map.keys  bs
-    emptyLiveVars = Map.fromList . map (,Set.empty) . Map.keys $ bs
-    addEmptyLiveVars b = BasicBlock {Compile.IR.lines = map (,Set.empty) (Compile.IR.lines b), successors = successors b}
-    initialState = LivenessState {blocks = fmap addEmptyLiveVars bs, liveAfter = emptyLiveVars, liveBefore = emptyLiveVars}
+    addEmptyLiveVars b = b {Compile.IR.lines = map (,Set.empty) $ Compile.IR.lines b}
+    initialState = LivenessState {blocks = fmap addEmptyLiveVars bs, cashedInputs = Map.empty}
+
 
 updateAllUntilConvergence :: (Ord t) => [Label] -> Liveness t ()
 updateAllUntilConvergence order = do
@@ -40,24 +41,30 @@ updateAllUntilConvergence order = do
 
 update :: (Ord t) => Label -> Liveness t Bool
 update l = do
-  curr <- get
-  let b = fromJust . Map.lookup l . blocks $ curr
-  let ls = Compile.IR.lines b
-  let succs = successors b
-  let oldLiveAfter = fromJust . Map.lookup l . liveAfter $ curr
-  let myLiveAfter = Set.unions . map (\s -> fromJust . Map.lookup s $ liveBefore curr) $ succs
-  if myLiveAfter == oldLiveAfter
+  bs <- gets blocks
+  cis <- gets cashedInputs
+  let b = unsafeLookup l bs
+  let cashedInput = Map.lookup l cis
+  input <- Set.unions <$> mapM outputOf (successors b)
+  if cashedInput == Just input
     then return False
     else do
-      let stmts = map fst ls
-      let lineLivenesses = localLiveness myLiveAfter stmts
-      let updatedLines = zip stmts lineLivenesses
-      let b' = b {Compile.IR.lines = updatedLines}
-      put curr {blocks = Map.insert l b' (blocks curr)}
-      put curr {liveAfter = Map.insert l (head lineLivenesses) (liveAfter curr)}
+      let b' = b {Compile.IR.lines = addLocalLiveness input (map fst $ Compile.IR.lines b)}
+      modify (\s -> s {blocks = Map.insert l b' (blocks s), cashedInputs = Map.insert l input (cashedInputs s)})
       return True
 
-localLiveness :: (Ord t) => LiveVars t -> [IStmt t] -> [LiveVars t]
+outputOf :: Label -> Liveness t (LiveVars t)
+outputOf l = do
+  bs <- gets blocks
+  return $ snd . head . Compile.IR.lines . unsafeLookup l $ bs
+
+unsafeLookup :: (Ord k) => k -> Map.Map k a -> a
+unsafeLookup k m = fromJust $ Map.lookup k m
+
+addLocalLiveness :: Ord t => LiveVars t -> [IStmt t] -> [(IStmt t, LiveVars t)]
+addLocalLiveness input stmts = zip stmts (localLiveness input stmts)
+
+localLiveness :: Ord t => LiveVars t -> [IStmt t] -> [LiveVars t]
 localLiveness inital = foldr f []
   where
     f stmt [] = [nowLive stmt inital]
@@ -75,7 +82,7 @@ nowLive (Goto _) = id
 nowLive (GotoIfNot _ _) = id
 nowLive (Return (Imm _)) = const Set.empty
 nowLive (Return (Reg x)) = const $ Set.singleton x
-nowLive (Phi _ _) = error "todo: how does Phi affect liveness"
+nowLive (Phi _ _) = error "todo: how does Phi impact liveness??"
 
 changeIfReg :: (Ord t) => (t -> LiveVars t -> LiveVars t) -> Operand t -> LiveVars t -> LiveVars t
 changeIfReg f (Reg x) = f x
