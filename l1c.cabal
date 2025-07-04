@@ -43,6 +43,7 @@ executable l1c
                   Compile.IR,
                   Compile.Dataflow.DFS,
                   Compile.Dataflow.Liveness,
+                  Compile.Dataflow.SSA,
                   Error
     hs-source-dirs:   app
     default-language: Haskell2010

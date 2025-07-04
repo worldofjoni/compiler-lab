@@ -2,45 +2,44 @@
 
 module Compile.Dataflow.Liveness (LiveVars, LivenessBlock, LivenessFunc, addLiveness) where
 
+import Compile.Dataflow.DFS (orderGraph)
 import Compile.IR
 import Control.Monad
 import Control.Monad.State
 import qualified Data.Map as Map
 import Data.Maybe (fromJust)
 import qualified Data.Set as Set
-import Compile.Dataflow.DFS (orderGraph)
 
 type LiveVars t = Set.Set t
 
 type LivenessBlock t = BasicBlock (IStmt t, LiveVars t)
-type LivenessFunc t = BBFunc (IStmt t, LiveVars t)
 
-type Liveness t a = State (LivenessState t) a
- 
+type LivenessFunc t d = BBFunc (IStmt t, LiveVars t) d
 
-data LivenessState t = LivenessState
-  { blocks :: Map.Map Label (LivenessBlock t),
+type Liveness t d a = State (LivenessState t d) a
+
+data LivenessState t d = LivenessState
+  { blocks :: Map.Map Label (LivenessBlock t d),
     cashedInputs :: Map.Map Label (LiveVars t)
   }
   deriving (Show)
 
-addLiveness :: (Ord t) => BBFunc (IStmt t) -> LivenessFunc t
+addLiveness :: (Ord t) => BBFunc (IStmt t) d -> LivenessFunc t d
 addLiveness (name, bs) =
-    ( name,
-      blocks $ execState (updateAllUntilConvergence order) initialState
-    )
+  ( name,
+    blocks $ execState (updateAllUntilConvergence order) initialState
+  )
   where
     order = orderGraph bs name
     addEmptyLiveVars b = b {Compile.IR.lines = map (,Set.empty) $ Compile.IR.lines b}
     initialState = LivenessState {blocks = fmap addEmptyLiveVars bs, cashedInputs = Map.empty}
 
-
-updateAllUntilConvergence :: (Ord t) => [Label] -> Liveness t ()
+updateAllUntilConvergence :: (Ord t) => [Label] -> Liveness t d ()
 updateAllUntilConvergence order = do
   changed <- mapM update order
   Control.Monad.when (or changed) $ updateAllUntilConvergence order
 
-update :: (Ord t) => Label -> Liveness t Bool
+update :: (Ord t) => Label -> Liveness t d Bool
 update l = do
   bs <- gets blocks
   cis <- gets cashedInputs
@@ -54,7 +53,7 @@ update l = do
       modify (\s -> s {blocks = Map.insert l b' (blocks s), cashedInputs = Map.insert l input (cashedInputs s)})
       return True
 
-outputOf :: Label -> Liveness t (LiveVars t)
+outputOf :: Label -> Liveness t d (LiveVars t)
 outputOf l = do
   bs <- gets blocks
   return $ snd . head . Compile.IR.lines . unsafeLookup l $ bs
@@ -62,10 +61,10 @@ outputOf l = do
 unsafeLookup :: (Ord k) => k -> Map.Map k a -> a
 unsafeLookup k m = fromJust $ Map.lookup k m
 
-addLocalLiveness :: Ord t => LiveVars t -> [IStmt t] -> [(IStmt t, LiveVars t)]
+addLocalLiveness :: (Ord t) => LiveVars t -> [IStmt t] -> [(IStmt t, LiveVars t)]
 addLocalLiveness input stmts = zip stmts (localLiveness input stmts)
 
-localLiveness :: Ord t => LiveVars t -> [IStmt t] -> [LiveVars t]
+localLiveness :: (Ord t) => LiveVars t -> [IStmt t] -> [LiveVars t]
 localLiveness inital = foldr f []
   where
     f stmt [] = [nowLive stmt inital]
