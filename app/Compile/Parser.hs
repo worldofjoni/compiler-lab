@@ -79,7 +79,7 @@ parseType =
   do
     t <- parseType'
     supps <- many (ArrayType <$ symbol "[]" <|> PointerType <$ symbol "*")
-    pure $ foldr ($) t supps
+    pure $ foldl (flip ($)) t supps
     <?> "type"
 
 stmt :: Parser Stmt
@@ -161,7 +161,7 @@ lvalue =
         (flip Field <$ symbol "." <*> identifier)
           <|> ((\i l -> Field (Deref l) i) <$ symbol "->" <*> identifier)
           <|> (flip ArrayAccess <$> brackets expr)
-    pure $ foldr ($) lv exts
+    pure $ foldl (flip ($)) lv exts
     <?> "lvalue"
 
 decl :: Parser Simp

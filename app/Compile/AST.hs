@@ -13,8 +13,8 @@ data Definition = Function Function | Struct StructDef
 
 filterFunctions :: [Definition] -> [Function]
 filterFunctions [] = []
-filterFunctions (Function f:fs) = f:filterFunctions fs
-filterFunctions (_:fs) = filterFunctions fs
+filterFunctions (Function f : fs) = f : filterFunctions fs
+filterFunctions (_ : fs) = filterFunctions fs
 
 data StructDef = StructDef Ident [StructField]
 
@@ -33,7 +33,7 @@ data Type
   | StructType Ident
   | PointerType Type
   | ArrayType Type
-  deriving (Eq)
+  deriving (Eq, Ord)
 
 instance Show Type where
   show IntType = "int"
