@@ -23,7 +23,7 @@ type Namespace = Map.Map String Type
 
 type Signature = (Type, [Type])
 
-functionSignatures :: AST -> L1ExceptT (Map.Map String Signature)
+functionSignatures :: [Function] -> L1ExceptT (Map.Map String Signature)
 functionSignatures ast = do
   let sigs = map sig ast ++ predefined
   let names = map fst sigs
@@ -31,7 +31,7 @@ functionSignatures ast = do
   mapM_ checkParamDistinctness ast
   unless (distinct names) (semanticFail "function names are not distinct")
   unless ("main" `elem` names) (semanticFail "no main function")
-  unless (fromJust (Map.lookup "main" sigMap) == (IntType,[])) (semanticFail "main must return int and have no parameters")
+  unless (fromJust (Map.lookup "main" sigMap) == (IntType, [])) (semanticFail "main must return int and have no parameters")
   return sigMap
   where
     sig (Func ret name params _ _) = (name, (ret, map fst params))
@@ -59,8 +59,10 @@ initalNamespace = Map.fromList . map swap
 varStatusAnalysis :: AST -> L1ExceptT ()
 varStatusAnalysis ast =
   do
-    signatures <- functionSignatures ast
-    mapM_ (checkFunction signatures) ast
+    signatures <- functionSignatures fs
+    mapM_ (checkFunction signatures) fs
+  where
+    fs = filterFunctions ast
 
 checkFunction :: Map.Map String Signature -> Function -> L1ExceptT ()
 checkFunction signatrues (Func t _ params stmts _) = do
@@ -134,13 +136,13 @@ checkSimp (Init ty name e pos) = do
       "Variable " ++ name ++ " redeclared (initialized) at: " ++ posPretty pos
   checkExpr ty e
   declare name ty
-checkSimp (Asgn name Nothing e pos) = do
+checkSimp (Asgn (Var name) Nothing e pos) = do
   val <- gets (Map.lookup name . namespace)
   case val of
     Nothing -> undeclaredFail name pos
     Just ty ->
       checkExpr ty e
-checkSimp (Asgn name (Just op) e pos) = do
+checkSimp (Asgn (Var name) (Just op) e pos) = do
   val <- gets (Map.lookup name . namespace)
   case val of
     Nothing -> undeclaredFail name pos
@@ -165,7 +167,7 @@ checkExpr IntType (IntExpr str pos) = do
       semanticFail' $ "Error in " ++ posPretty pos ++ e
     Right _ -> return ()
 checkExpr ty (IntExpr _ pos) = semanticFail' $ "Expected " ++ show ty ++ " but got integer at: " ++ posPretty pos
-checkExpr ty (IdentExpr name pos) = do
+checkExpr ty (LValueExpr (Var name) pos) = do
   val <- gets (Map.lookup name . namespace)
   case val of
     Just ty2

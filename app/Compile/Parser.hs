@@ -36,18 +36,21 @@ type Parser = Parsec Void String
 astParser :: Parser AST
 astParser = do
   sc
-  functions <- many parseDefinition
+  defs <- many parseDefinition
   eof
-  return functions
+  return defs
 
 parseDefinition :: Parser Definition
-parseDefinition = Struct <$> parseStructDef <|> Function <$> parseFunction
+parseDefinition =
+  (Struct <$> parseStructDef)
+    <|> (Function <$> parseFunction)
 
 parseStructDef :: Parser StructDef
 parseStructDef = do
   reserved "struct"
   name <- identifier
   members <- braces $ many $ (,) <$> parseType <*> identifier <* semi
+  semi
   pure $ StructDef name members
 
 parseFunction :: Parser Function
@@ -65,14 +68,18 @@ parseCall = (,,) <$> funcIdentifier <*> nTuple expr <*> getSourcePos
 nTuple :: Parser a -> Parser [a]
 nTuple p = parens $ ((:) <$> p <*> many (symbol "," >> p)) <|> pure []
 
-parseType :: Parser Type
-parseType =
+parseType' :: Parser Type
+parseType' =
   (IntType <$ reserved "int")
     <|> (BoolType <$ reserved "bool")
     <|> (StructType <$ reserved "struct" <*> identifier)
-    <|> do
-      t <- parseType
-      (symbol "[]" >> pure (ArrayType t)) <|> (symbol "*" >> pure (PointerType t)) <|> pure t
+
+parseType :: Parser Type
+parseType =
+  do
+    t <- parseType'
+    supps <- many (ArrayType <$ symbol "[]" <|> PointerType <$ symbol "*")
+    pure $ foldr ($) t supps
     <?> "type"
 
 stmt :: Parser Stmt
@@ -139,16 +146,22 @@ parseBreak = do
 simp :: Parser Simp
 simp = try decl <|> try asign <|> (uncurry3 SimpCall <$> parseCall)
 
-lvalue :: Parser LValue
-lvalue =
+lvalue' :: Parser LValue
+lvalue' =
   try (Var <$> identifier)
     <|> parens lvalue
     <|> (Deref <$ symbol "*" <*> lvalue)
-    <|> do
-      lv <- lvalue
-      (Field lv <$ symbol "." <*> identifier)
-        <|> (Field (Deref lv) <$ symbol "->" <*> identifier)
-        <|> (ArrayAccess lv <$> brackets expr)
+
+lvalue :: Parser LValue
+lvalue =
+  do
+    lv <- lvalue'
+    exts <-
+      many $
+        (flip Field <$ symbol "." <*> identifier)
+          <|> ((\i l -> Field (Deref l) i) <$ symbol "->" <*> identifier)
+          <|> (flip ArrayAccess <$> brackets expr)
+    pure $ foldr ($) lv exts
     <?> "lvalue"
 
 decl :: Parser Simp
@@ -201,15 +214,15 @@ ret = do
 expr' :: Parser Expr
 expr' =
   parens expr
-    <|> (Alloc <$ reserved "alloc" <*> parens parseType)
     <|> (uncurry AllocArray <$ reserved "alloc_array" <*> tuple parseType expr)
+    <|> (Alloc <$ reserved "alloc" <*> parens parseType)
     <|> try (uncurry3 Call <$> parseCall)
     <|> intExpr
     <|> boolExpr
     <|> lvalueExpr
 
 tuple :: Parser a -> Parser b -> Parser (a, b)
-tuple a b = parens ((,) <$> a <*> b)
+tuple a b = parens ((,) <$> a <* symbol "," <*> b)
 
 intExpr :: Parser Expr
 intExpr = do

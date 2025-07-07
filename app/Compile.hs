@@ -22,8 +22,11 @@ data Job = Job
 
 compile :: Job -> L1ExceptT ()
 compile job = do
+  liftIO $ putStrLn "compiling..."
   ast <- parseAST $ src job
+  liftIO $ putStrLn "parsed"
   semanticAnalysis ast
+  liftIO $ putStrLn "semanticed"
   -- liftIO . print $ ast
   let ir = translate ast
   liftIO . putStrLn . unlines . map (showIRFunc . addLiveness) $ ir

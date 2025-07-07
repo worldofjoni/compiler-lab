@@ -7,11 +7,12 @@ import Data.Foldable (traverse_)
 import Data.Set as Set
   ( Set,
     empty,
+    fromList,
     insert,
     intersection,
     member,
     union,
-    (\\), fromList,
+    (\\),
   )
 import Error (L1ExceptT, semanticFail)
 import Text.Megaparsec (SourcePos)
@@ -77,9 +78,10 @@ semanticFail' = lift . semanticFail
 
 checkInitialized :: AST -> L1ExceptT ()
 checkInitialized [] = pure ()
-checkInitialized (Func _ _ params stmts _:fs) = do
-   _ <- execStateT (mapM_ checkStmt stmts) (newState params)
-   checkInitialized fs
+checkInitialized (Function (Func _ _ params stmts _) : fs) = do
+  _ <- execStateT (mapM_ checkStmt stmts) (newState params)
+  checkInitialized fs
+checkInitialized (_ : fs) = checkInitialized fs
 
 checkStmt :: Stmt -> L1InitCheck ()
 checkStmt (SimpStmt s) = checkSimp s
@@ -114,15 +116,15 @@ checkStmt (Ret e _) = checkExpr e >> defineAll
 checkSimp :: Simp -> L1InitCheck ()
 checkSimp (Decl _ name _) = declare name
 checkSimp (Init _ name e _) = checkExpr e >> declare name >> define name
-checkSimp (Asgn target Nothing expr _) = checkExpr expr >> define target
-checkSimp (Asgn target (Just _) expr pos) = assertDefined target pos >> checkExpr expr
+checkSimp (Asgn (Var target) Nothing expr _) = checkExpr expr >> define target
+checkSimp (Asgn (Var target) (Just _) expr pos) = assertDefined target pos >> checkExpr expr
 checkSimp (SimpCall _ args _) = mapM_ checkExpr args
 
 checkExpr :: Expr -> L1InitCheck ()
 checkExpr (IntExpr _ _) = pure ()
 checkExpr (BoolExpr _ _) = pure ()
-checkExpr (IdentExpr name pos) = assertDefined name pos
+checkExpr (LValueExpr (Var name) pos) = assertDefined name pos
 checkExpr (BinExpr e1 _ e2) = checkExpr e1 >> checkExpr e2
 checkExpr (UnExpr _ e) = checkExpr e
 checkExpr (Ternary a b c) = checkExpr a >> checkExpr b >> checkExpr c
-checkExpr (Call _ args _)  = mapM_ checkExpr args
+checkExpr (Call _ args _) = mapM_ checkExpr args

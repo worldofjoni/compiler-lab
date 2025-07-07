@@ -24,7 +24,9 @@ data TranslateState = TranslateState
   }
 
 translate :: AST -> IR
-translate = map genFunct
+translate = undefined
+
+-- translate = map genFunct
 
 freshReg :: Translate VRegister
 freshReg = do
@@ -96,10 +98,10 @@ genStmt (SimpStmt (Decl {})) = do
 genStmt (SimpStmt (Init _ name e _)) = do
   assignTo (Left name) e
 genStmt (SimpStmt (Asgn name Nothing e _)) = do
-  assignTo (Left name) e
+  assignTo (Left undefined) e
 genStmt (SimpStmt (Asgn name (Just op) e _)) = do
   x <- toOperand e
-  emit $ Left name :<-+ (Reg (Left name), op, x)
+  emit $ Left undefined :<-+ (Reg (Left undefined), op, x)
 genStmt (Ret e _) = do
   x <- toOperand e
   emit $ Return x
@@ -192,7 +194,7 @@ maybeGenSimp = maybeGenStmt . fmap SimpStmt
 toOperand :: Expr -> Translate (Operand NameOrReg)
 toOperand (IntExpr n _) = pure . Imm . read $ n
 toOperand (BoolExpr b _) = pure . Imm . boolToInt $ b
-toOperand (IdentExpr name _) = do
+toOperand (LValueExpr (Var name) _) = do
   return . Reg . Left $ name
 toOperand e = do
   t <- freshReg
@@ -208,7 +210,7 @@ assignTo d (IntExpr n _) = do
   emit $ d :<- Imm (read n)
 assignTo d (BoolExpr b _) = do
   emit $ d :<- Imm (boolToInt b)
-assignTo d (IdentExpr name _) = do
+assignTo d (LValueExpr (Var name) _) = do
   emit $ d :<- Reg (Left name)
 assignTo d (UnExpr op e) = do
   x <- toOperand e

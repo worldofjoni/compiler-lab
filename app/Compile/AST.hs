@@ -11,6 +11,11 @@ type Ident = String
 
 data Definition = Function Function | Struct StructDef
 
+filterFunctions :: [Definition] -> [Function]
+filterFunctions [] = []
+filterFunctions (Function f:fs) = f:filterFunctions fs
+filterFunctions (_:fs) = filterFunctions fs
+
 data StructDef = StructDef Ident [StructField]
 
 type StructField = (Type, Ident)
