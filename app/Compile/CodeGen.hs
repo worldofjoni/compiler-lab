@@ -1,7 +1,8 @@
-module Compile.CodeGen (genAsm) where
+module Compile.CodeGen (genAsm, dummyAsm) where
 
 import Compile.AST (Op (..), UnOp (..))
 import Compile.IR (FrameSizes, IR, IStmt (..), NameOrReg, Operand (..), VRegister)
+import Control.Monad.ST (ST)
 import Data.Foldable (Foldable (toList))
 import qualified Data.Map as Map
 import Data.Maybe (fromJust)
@@ -164,3 +165,6 @@ functions =
       "func_read:\n  push %rax\n  mov $0, %rax\n  mov $0, %rdi\n  mov %rsp, %rsi\n  mov $1, %rdx\n  syscall\n  mov %rax, %rbx\n  pop %rax\n  and $0xFF, %rax\n  mov $-1, %edx\n  cmp $1, %rbx\n  cmovnz %edx, %eax\n  ret\n  ",
       "func_flush: \n   mov $0, %eax\n ret\n"
     ]
+
+dummyAsm :: String
+dummyAsm = preamble ++ "func_main:\nmov $0, %eax\nret"

@@ -4,7 +4,7 @@ module Compile
   )
 where
 
-import Compile.CodeGen (genAsm)
+import Compile.CodeGen (genAsm, dummyAsm)
 import Compile.Dataflow.Liveness (addLiveness)
 import Compile.IR (showIRFunc)
 import Compile.Parser (parseAST)
@@ -31,8 +31,9 @@ compile job = do
   -- let ir = translate ast
   -- liftIO . putStrLn . unlines . map (showIRFunc . addLiveness) $ ir
   -- let asm = genAsm frameSizes ir
+  let asm = dummyAsm
   -- liftIO . putStrLn . enumLines $ asm
-  -- _ <- liftIO $ readProcess "gcc" ["-x", "assembler", "-", "-o", out job] asm
+  _ <- liftIO $ readProcess "gcc" ["-x", "assembler", "-", "-o", out job] asm
   return ()
 
 enumLines :: String -> String
