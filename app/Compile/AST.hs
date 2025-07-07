@@ -5,20 +5,37 @@ import Text.Megaparsec
 
 type AST = Program
 
-type Program = [Function]
+type Program = [Definition]
 
-data Function = Func Type String [(Type, String)] Block SourcePos
+type Ident = String
+
+data Definition = Function Function | Struct StructDef
+
+data StructDef = StructDef Ident [StructField]
+
+type StructField = (Type, Ident)
+
+data Function = Func Type Ident [(Type, Ident)] Block SourcePos
 
 instance Show Function where
   show (Func ty name params code _) = show ty ++ " " ++ name ++ "(" ++ intercalate ", " (map show params) ++ ")\n" ++ show code
 
 type Block = [Stmt]
 
-data Type = IntType | BoolType deriving (Eq)
+data Type
+  = IntType
+  | BoolType
+  | StructType Ident
+  | PointerType Type
+  | ArrayType Type
+  deriving (Eq)
 
 instance Show Type where
   show IntType = "int"
   show BoolType = "bool"
+  show (StructType name) = "struct " ++ name
+  show (PointerType t) = show t ++ "*"
+  show (ArrayType t) = show t ++ "[]"
 
 data Stmt
   = SimpStmt Simp
@@ -31,10 +48,13 @@ data Stmt
   | Ret Expr SourcePos
   deriving (Show)
 
+data LValue = Var Ident | Field LValue Ident | Deref LValue | ArrayAccess LValue Expr
+  deriving (Show)
+
 data Simp
   = Decl Type String SourcePos
   | Init Type String Expr SourcePos
-  | Asgn String AsgnOp Expr SourcePos
+  | Asgn LValue AsgnOp Expr SourcePos
   | SimpCall String [Expr] SourcePos
   deriving (Show)
 
@@ -46,11 +66,14 @@ isDecl _ = False
 data Expr
   = IntExpr String SourcePos
   | BoolExpr Bool SourcePos
-  | IdentExpr String SourcePos
+  | Null SourcePos
+  | LValueExpr LValue SourcePos
   | BinExpr Expr Op Expr
   | UnExpr UnOp Expr
   | Ternary Expr Expr Expr
   | Call String [Expr] SourcePos
+  | Alloc Type
+  | AllocArray Type Expr
   deriving (Show)
 
 -- Nothing means =, Just is for +=, %=, ...
