@@ -28,8 +28,8 @@ compile job = do
   semanticAnalysis ast
   liftIO $ putStrLn "semanticed"
   -- liftIO . print $ ast
-  let ir = translate ast
-  liftIO . putStrLn . unlines . map (showIRFunc . addLiveness) $ ir
+  -- let ir = translate ast
+  -- liftIO . putStrLn . unlines . map (showIRFunc . addLiveness) $ ir
   -- let asm = genAsm frameSizes ir
   -- liftIO . putStrLn . enumLines $ asm
   -- _ <- liftIO $ readProcess "gcc" ["-x", "assembler", "-", "-o", out job] asm
