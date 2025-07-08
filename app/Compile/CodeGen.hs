@@ -25,7 +25,7 @@ genAsm = unlines . (preamble :) . toList . map (uncurry genFunc)
     genIStmt :: IStmt PhyRegister -> String
     -- genIStmt (Label l) = unlines [l ++ ":"]
     genIStmt (Goto l) = unlines ["jmp bb_" ++ l]
-    genIStmt (GotoIfNot l b) = unlines [mov (showOperand b) "%ecx", "cmpl $0, %ecx", "je " ++ l]
+    genIStmt (GotoIfNot l b) = unlines [mov (showOperand b) "%ecx", "cmpl $0, %ecx", "je bb_" ++ l]
     genIStmt (x :<- (Imm i)) = mov (decConst i) (show x)
     genIStmt (x :<- (Reg r)) = unlines [mov (show r) "%eax", mov "%eax" (show x)]
     genIStmt (x :<-+ (a, Mul, b)) =
