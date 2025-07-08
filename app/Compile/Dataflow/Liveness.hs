@@ -12,36 +12,34 @@ import qualified Data.Set as Set
 
 type LiveVars t = Set.Set t
 
-type LivenessBlock t = BasicBlock (IStmt t, LiveVars t)
+type LivenessBlock t = BasicBlock (IStmt t, LiveVars t) ()
 
 type LivenessFunc t = BBFunc t (LiveVars t)
 
 type Liveness t a = State (LivenessState t) a
 
-type Liveness t d a = State (LivenessState t d) a
-
-data LivenessState t d = LivenessState
-  { blocks :: Map.Map Label (LivenessBlock t d),
+data LivenessState t = LivenessState
+  { blocks :: Map.Map Label (LivenessBlock t),
     cashedInputs :: Map.Map Label (LiveVars t)
   }
   deriving (Show)
 
-addLiveness :: (Ord t) => BBFunc t a -> LivenessFunc t
+addLiveness :: (Ord t) => BBFunc t () -> LivenessFunc t
 addLiveness f =
   f
     { funcBlocks = blocks $ execState (updateAllUntilConvergence order) initialState
     }
   where
     order = orderGraph (funcBlocks f) (funcName f)
-    addEmptyLiveVars b = b {Compile.IR.lines = map (,Set.empty) $ Compile.IR.lines b}
-    initialState = LivenessState {blocks = fmap (addEmptyLiveVars . fmap fst) (funcBlocks f), cashedInputs = Map.empty}
+    addEmptyLiveVars b = b {Compile.IR.lines = map (\(x, ()) -> (x, Set.empty)) $ Compile.IR.lines b}
+    initialState = LivenessState {blocks = fmap addEmptyLiveVars (funcBlocks f), cashedInputs = Map.empty}
 
 updateAllUntilConvergence :: (Ord t) => [Label] -> Liveness t ()
 updateAllUntilConvergence order = do
   changed <- mapM update order
   Control.Monad.when (or changed) $ updateAllUntilConvergence order
 
-update :: (Ord t) => Label -> Liveness t d Bool
+update :: (Ord t) => Label -> Liveness t Bool
 update l = do
   bs <- gets blocks
   cis <- gets cashedInputs
@@ -55,7 +53,7 @@ update l = do
       modify (\s -> s {blocks = Map.insert l b' (blocks s), cashedInputs = Map.insert l input (cashedInputs s)})
       return True
 
-outputOf :: Label -> Liveness t d (LiveVars t)
+outputOf :: Label -> Liveness t (LiveVars t)
 outputOf l = do
   ls <- gets (Compile.IR.lines . unsafeLookup l . blocks)
   return $ if null ls then Set.empty else snd . head $ ls

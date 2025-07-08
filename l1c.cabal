@@ -44,7 +44,7 @@ executable l1c
                   Compile.IR,
                   Compile.Dataflow.DFS,
                   Compile.Dataflow.Liveness,
-                  Compile.Dataflow.SSA,
+                  -- Compile.Dataflow.SSA,
                   Compile.Dataflow.Coloring,
                   Compile.Dataflow.RegAlloc,
                   Error

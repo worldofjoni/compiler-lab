@@ -51,7 +51,7 @@ emit instr = modify $ \s -> s {currentLines = currentLines s ++ [instr]}
 commitAndNew :: [Label] -> Label -> Translate ()
 commitAndNew succs newLabel = modify $ \s -> s {currentLines = [], currentLabel = newLabel, code = Map.insert (currentLabel s) (newBlock s) (code s)}
   where
-    newBlock s = BasicBlock {Compile.IR.lines = currentLines s, successors = succs}
+    newBlock s = BasicBlock {Compile.IR.lines = currentLines s, successors = succs, extra = ()}
 
 pushLoopEnd :: Label -> Translate ()
 pushLoopEnd l = modify $ \s -> s {loopEnds = l : loopEnds s}
@@ -67,28 +67,28 @@ popLoopContinue () = modify $ \s -> s {loopContinues = tail $ loopContinues s}
 
 -- -----------------------------------------------------------
 
-genFunct :: Function -> IRFunc
+genFunct :: Function -> BBFunc NameOrReg ()
 genFunct (Func _ name args block _) =
   BBFunc
     { funcName = name,
       funcArgs = map (Left . snd) args :: [NameOrReg],
       funcBlocks =
-        fmap (fmap (,()))
-          <$> code
-          $ execState
-            ( do
-                genBlock block
-                commitAndNew [] ""
-            )
-            TranslateState
-              { nextReg = 0,
-                nextLabelNo = 0,
-                loopEnds = [],
-                loopContinues = [],
-                code = Map.empty,
-                currentLines = [],
-                currentLabel = name
-              }
+        fmap (fmapSameExtra (\s -> (s, ()))) $
+          code $
+            execState
+              ( do
+                  genBlock block
+                  commitAndNew [] ""
+              )
+              TranslateState
+                { nextReg = 0,
+                  nextLabelNo = 0,
+                  loopEnds = [],
+                  loopContinues = [],
+                  code = Map.empty,
+                  currentLines = [],
+                  currentLabel = name
+                }
     }
 
 -- todo

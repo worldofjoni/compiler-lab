@@ -29,19 +29,19 @@ showIRFunc f =
     join [x] = x
     join (x : xs) = x ++ ", " ++ join xs
 
-data BasicBlock line = BasicBlock {lines :: [line], successors :: [Label]}
+data BasicBlock line e = BasicBlock {lines :: [line], successors :: [Label], extra :: e}
 
-instance (Show l) => Show (BasicBlock l) where
-  show :: (Show l) => BasicBlock l -> String
-  show (BasicBlock lns suc) = (unlines . map show $ lns) ++ "\nSuccs:\n" ++ show suc ++ "\n\n"
+instance (Show l, Show e) => Show (BasicBlock l e) where
+  show :: (Show l, Show e) => BasicBlock l e -> String
+  show (BasicBlock lns suc e) = (unlines . map show $ lns) ++ "\nSuccs:\n" ++ show suc ++ "\nextra:" ++ show e ++ "\n\n"
 
 type NameOrReg = Either VarName VRegister
 
-data BBFunc r sup = BBFunc {funcName :: String, funcArgs :: [r], funcBlocks :: Map.Map Label (BasicBlock (IStmt r, sup))}
+data BBFunc r sup = BBFunc {funcName :: String, funcArgs :: [r], funcBlocks :: Map.Map Label (BasicBlock (IStmt r, sup) ())}
 
 type IRFunc = BBFunc NameOrReg ()
 
-type IRBasicBlock = BasicBlock (IStmt NameOrReg)
+type IRBasicBlock = BasicBlock (IStmt NameOrReg) ()
 
 data Operand a = Reg a | Imm Integer
 
@@ -86,8 +86,8 @@ instance Functor IStmt where
   fmap f (CallIr x l xs) = CallIr (fmap f x) l (fmap f xs)
   fmap _ Nop = Nop
 
-instance Functor BasicBlock where
-  fmap f b = b {Compile.IR.lines = map f (Compile.IR.lines b)}
+fmapSameExtra :: (a -> b) -> BasicBlock a e -> BasicBlock b e
+fmapSameExtra f b = b {Compile.IR.lines = map f (Compile.IR.lines b)}
 
 fmapSameSup :: (a -> b) -> BBFunc a sup -> BBFunc b sup
-fmapSameSup f func = func {funcArgs = map f $ funcArgs func, funcBlocks = fmap (\(x, y) -> (f <$> x, y)) <$> funcBlocks func}
+fmapSameSup f func = func {funcArgs = map f $ funcArgs func, funcBlocks = fmapSameExtra (\(x, y) -> (f <$> x, y)) <$> funcBlocks func}
