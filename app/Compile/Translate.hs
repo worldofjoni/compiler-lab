@@ -20,7 +20,8 @@ data TranslateState = TranslateState
     loopContinues :: [Label],
     code :: Map.Map Label IRBasicBlock,
     currentLines :: [IStmt NameOrReg],
-    currentLabel :: Label
+    currentLabel :: Label,
+    currentFunc :: String
   }
 
 translate :: AST -> IR
@@ -33,17 +34,18 @@ freshReg = do
   put curr {nextReg = r + 1}
   return r
 
-freshLabel :: Translate Label
-freshLabel = do
-  curr <- get
-  let r = nextLabelNo curr
-  put curr {nextLabelNo = r + 1}
-  return $ show r
-
 freshLabelWithPrefix :: String -> Translate Label
 freshLabelWithPrefix prefix = do
+  f <- gets currentFunc
   l <- freshLabel
-  return $ prefix ++ l
+  return $ f ++ "_" ++ prefix ++ l
+  where
+    freshLabel :: Translate Label
+    freshLabel = do
+      curr <- get
+      let r = nextLabelNo curr
+      put curr {nextLabelNo = r + 1}
+      return $ show r
 
 emit :: IStmt NameOrReg -> Translate ()
 emit instr = modify $ \s -> s {currentLines = currentLines s ++ [instr]}
@@ -87,7 +89,8 @@ genFunct (Func _ name args block _) =
                   loopContinues = [],
                   code = Map.empty,
                   currentLines = [],
-                  currentLabel = name
+                  currentLabel = name,
+                  currentFunc = name
                 }
     }
 

@@ -128,7 +128,7 @@ genAsm = unlines . (preamble :) . toList . map (uncurry genFunc)
     genIStmt (Return o) = unlines $ [mov (showOperand o) "%eax"] ++ ["pop " ++ (show . var64) r | r <- usedRegs] ++ ["leave", "ret"]
     genIStmt (CallIr mret name regs) =
       unlines $
-        ["push " ++ show r | r <- reverse regs]
+        ["push " ++ (show . var64) r | r <- reverse regs]
           ++ ["call func_" ++ name]
           ++ maybe [] (pure . mov "%eax" . show) mret
           ++ ["pop %rax" | _ <- regs]
