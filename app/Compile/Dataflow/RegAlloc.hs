@@ -1,35 +1,44 @@
-module Compile.Dataflow.RegAlloc (PhyReg, allocateRegisters) where
+{-# LANGUAGE TupleSections #-}
 
-import Compile.Dataflow.Coloring (Color, Coloring, color, interferenceGraph)
-import Compile.Dataflow.Liveness (LiveVars, addLiveness)
+module Compile.Dataflow.RegAlloc (PhyRegister (..), allocateRegisters, usedRegs) where
+
+import Compile.Dataflow.Coloring (Coloring, color, interferenceGraph)
+import Compile.Dataflow.Liveness (addLiveness)
 import Compile.IR
+import Data.List (sort)
 import qualified Data.Map as Map
-import Data.Maybe (fromJust)
+import Data.Maybe (fromJust, mapMaybe)
 
-data PhyReg = PReg String | Stack Int | ArgStack Int
+data PhyRegister = PhyReg String | Stack Int | ArgStack Int
+  deriving (Eq)
 
 -- To make the code gen easer we leave some special registers unallocated:
-notUse = map PReg ["rax", "rbx", "rcx", "rdx", "rbp", "rsp"]
+notUse = map PhyReg ["rax", "rbx", "rcx", "rdx", "rbp", "rsp"]
 
 -- This leaves
-use = map PReg ["rdi", "rsi"] ++ map (PReg . ('r' :) . show) [8 .. 15] ++ map Stack [1 ..]
+usedRegs = map PhyReg ["rdi", "rsi"] ++ map (PhyReg . ('r' :) . show) [8 .. 15]
+
+use = usedRegs ++ map Stack [1 ..]
 
 -- which are ALL CALLEE SAVED.
 -- We parse arguments via:
-argumentRegs :: [PhyReg]
-argumentRegs = map PReg ["rax", "rbx", "rcx", "rdx"] ++ map ArgStack [1 ..]
+argumentRegs :: [PhyRegister]
+argumentRegs = map PhyReg ["rax", "rbx", "rcx", "rdx"] ++ map ArgStack [1 ..]
 
-allocateRegisters :: (Ord t) => BBFunc t () -> BBFunc PhyReg ()
-allocateRegisters f = mvArgs $ fmapSameSup (`unsafeLookup` (assignRegisters c)) f
+allocateRegisters :: (Ord t) => BBFunc t () -> (BBFunc PhyRegister (), Int)
+allocateRegisters f = (,maxStack) $ mvArgs $ fmapSameSup (\x -> Map.findWithDefault (Stack 0) x regAssignment) f
   where
     c = color . interferenceGraph . addLiveness $ f
+    regAssignment = assignRegisters c
+    maxStack = maximum . (0 :) . mapMaybe stackNum $ Map.elems regAssignment :: Int
+    stackNum r = case r of (Stack n) -> Just n; _ -> Nothing
 
-assignRegisters :: (Ord t) => Coloring t -> Map.Map t PhyReg
-assignRegisters = Map.mapMaybe (`Map.lookup` color2PhyReg)
+assignRegisters :: (Ord t) => Coloring t -> Map.Map t PhyRegister
+assignRegisters c = Map.mapMaybe (`Map.lookup` color2PhyRegister) c
   where
-    color2PhyReg = Map.fromList $ zip [1 ..] use
+    color2PhyRegister = Map.fromList $ zip (sort $ Map.elems c) use
 
-mvArgs :: BBFunc PhyReg () -> BBFunc PhyReg ()
+mvArgs :: BBFunc PhyRegister () -> BBFunc PhyRegister ()
 mvArgs func = func {funcBlocks = Map.adjust prependMvs (funcName func) (funcBlocks func)}
   where
     prependMvs b = b {Compile.IR.lines = zipWith mv (funcArgs func) argumentRegs ++ Compile.IR.lines b}

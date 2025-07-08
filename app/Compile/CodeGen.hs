@@ -1,29 +1,36 @@
 module Compile.CodeGen (genAsm) where
 
 import Compile.AST (Op (..), UnOp (..))
-import Compile.IR (FrameSizes, IR, IStmt (..), NameOrReg, Operand (..), VRegister)
+import Compile.Dataflow.RegAlloc (PhyRegister (..), usedRegs)
+import Compile.IR (BBFunc (BBFunc), BasicBlock (lines), IStmt (..), Operand (..), fmapSameExtra)
 import Data.Foldable (Foldable (toList))
 import qualified Data.Map as Map
-import Data.Maybe (fromJust)
-import GHC.Base (RuntimeRep (VecRep))
 
 type Asm = String
 
-genAsm :: FrameSizes -> IR -> Asm
-genAsm sizes = undefined -- unlines . (preamble :) . toList . fmap genIStmt
+genAsm :: [(BBFunc PhyRegister a, Int)] -> Asm
+genAsm = unlines . (preamble :) . toList . map (uncurry genFunc)
   where
-    genIStmt :: IStmt VRegister -> String
+    genFunc :: BBFunc PhyRegister a -> Int -> String
+    genFunc (BBFunc name _ blocks) maxStack = unlines . (funcPreamble ++) . map (uncurry genBasicBlock) . Map.toList . Map.map (fmapSameExtra fst) $ blocks
+      where
+        funcPreamble =
+          ["func_" ++ name ++ ":", "push %rbp", "mov %rsp, %rbp", "sub $" ++ show (maxStack * 4) ++ ", %rsp"]
+            ++ ["push " ++ show r | r <- usedRegs]
+    genBasicBlock :: String -> BasicBlock (IStmt PhyRegister) a -> String
+    genBasicBlock name b = name ++ ":\n" ++ (unlines . map genIStmt) (Compile.IR.lines b)
+    genIStmt :: IStmt PhyRegister -> String
     -- genIStmt (Label l) = unlines [l ++ ":"]
     genIStmt (Goto l) = unlines ["jmp " ++ l]
     genIStmt (GotoIfNot l b) = unlines [mov (showOperand b) "%ecx", "cmpl $0, %ecx", "je " ++ l]
-    genIStmt (x :<- (Imm i)) = mov (decConst i) (stackAddress x)
-    genIStmt (x :<- (Reg r)) = unlines [mov (stackAddress r) "%eax", mov "%eax" (stackAddress x)]
+    genIStmt (x :<- (Imm i)) = mov (decConst i) (show x)
+    genIStmt (x :<- (Reg r)) = unlines [mov (show r) "%eax", mov "%eax" (show x)]
     genIStmt (x :<-+ (a, Mul, b)) =
       unlines
         [ mov (showOperand a) "%eax",
           mov (showOperand b) "%ebx",
           "imul %eax, %ebx",
-          mov "%ebx" (stackAddress x)
+          mov "%ebx" (show x)
         ]
     genIStmt (x :<-+ (a, Div, b)) =
       unlines
@@ -31,7 +38,7 @@ genAsm sizes = undefined -- unlines . (preamble :) . toList . fmap genIStmt
           "cdq",
           mov (showOperand b) "%ecx",
           "idiv %ecx",
-          mov "%eax" (stackAddress x)
+          mov "%eax" (show x)
         ]
     genIStmt (x :<-+ (a, Mod, b)) =
       unlines
@@ -39,64 +46,64 @@ genAsm sizes = undefined -- unlines . (preamble :) . toList . fmap genIStmt
           "cdq",
           mov (showOperand b) "%ecx",
           "idiv %ecx",
-          mov "%edx" (stackAddress x)
+          mov "%edx" (show x)
         ]
     genIStmt (x :<-+ (a, Add, b)) =
       unlines
         [ mov (showOperand a) "%eax",
           "addl " ++ showOperand b ++ ", %eax",
-          mov "%eax" (stackAddress x)
+          mov "%eax" (show x)
         ]
     genIStmt (x :<-+ (a, Sub, b)) =
       unlines
         [ mov (showOperand a) "%eax",
           "subl " ++ showOperand b ++ ", %eax",
-          mov "%eax" (stackAddress x)
+          mov "%eax" (show x)
         ]
     genIStmt (x :<-+ (a, Shl, b)) =
       unlines
         [ mov (showOperand a) "%eax",
           mov (showOperand b) "%ecx",
           "shl %cl, %eax",
-          mov "%eax" (stackAddress x)
+          mov "%eax" (show x)
         ]
     genIStmt (x :<-+ (a, Shr, b)) =
       unlines
         [ mov (showOperand a) "%eax",
           mov (showOperand b) "%ecx",
           "sar %cl, %eax",
-          mov "%eax" (stackAddress x)
+          mov "%eax" (show x)
         ]
     genIStmt (Unary reg Neg a) =
       unlines
         [ mov (showOperand a) "%eax",
           "negl %eax",
-          mov "%eax" (stackAddress reg)
+          mov "%eax" (show reg)
         ]
     -- bitwise
     genIStmt (x :<-+ (a, BitOr, b)) =
       unlines
         [ mov (showOperand a) "%eax",
           "or " ++ showOperand b ++ ", %eax",
-          mov "%eax" (stackAddress x)
+          mov "%eax" (show x)
         ]
     genIStmt (x :<-+ (a, BitAnd, b)) =
       unlines
         [ mov (showOperand a) "%eax",
           "and " ++ showOperand b ++ ", %eax",
-          mov "%eax" (stackAddress x)
+          mov "%eax" (show x)
         ]
     genIStmt (x :<-+ (a, BitXor, b)) =
       unlines
         [ mov (showOperand a) "%eax",
           "xor " ++ showOperand b ++ ", %eax",
-          mov "%eax" (stackAddress x)
+          mov "%eax" (show x)
         ]
     genIStmt (Unary x BitNot a) =
       unlines
         [ mov (showOperand a) "%eax",
           "not %eax",
-          mov "%eax" (stackAddress x)
+          mov "%eax" (show x)
         ]
     -- comparisons
     genIStmt (x :<-+ (a, Lt, b)) = genCompare "setl" x a b
@@ -112,39 +119,45 @@ genAsm sizes = undefined -- unlines . (preamble :) . toList . fmap genIStmt
       unlines
         [ mov (showOperand a) "%eax",
           "xor $1, %eax",
-          mov "%eax" (stackAddress x)
+          mov "%eax" (show x)
         ]
     genIStmt Nop = ""
-    genIStmt (Return o) = unlines [mov (showOperand o) "%eax", "leave", "ret"]
+    genIStmt (Return o) = unlines $ ["pop " ++ show r | r <- usedRegs] ++ [mov (showOperand o) "%eax", "leave", "ret"]
     genIStmt (CallIr mret name regs) =
       unlines $
-        ["push " ++ stackAddress r | r <- reverse regs]
+        ["push " ++ show r | r <- reverse regs]
           ++ ["call func_" ++ name]
-          ++ maybe [] (pure . mov "%eax" . stackAddress) mret
+          ++ maybe [] (pure . mov "%eax" . show) mret
           ++ ["pop %rax" | _ <- regs]
+    genIStmt (Phi {}) = error "Phi nodes should be eliminated before code gen"
 
 -- genIStmt (FunctionLabel name) =
 -- unlines
 -- ["func_" ++ name ++ ":", "push %rbp", "mov %rsp, %rbp", "sub $" ++ (show . (* 4) . fromJust . Map.lookup name $ sizes) ++ ", %rsp"]
 
-genCompare :: String -> VRegister -> Operand VRegister -> Operand VRegister -> String
+genCompare :: String -> PhyRegister -> Operand PhyRegister -> Operand PhyRegister -> String
 genCompare setInst x a b =
   unlines
     [ mov (showOperand a) "%eax",
       "cmpl " ++ showOperand b ++ ", %eax",
       setInst ++ " %al",
       "movzbl %al, %eax",
-      mov "%eax" (stackAddress x)
+      mov "%eax" (show x)
     ]
 
-stackAddress :: VRegister -> String
-stackAddress reg
-  | reg >= 0 = show (-((reg + 1) * 4)) ++ "(%rbp)" -- current stack frame: skip previous base pointer
-  | otherwise = show (-((reg + 1) * 8) + 16) ++ "(%rbp)" -- function parameters: previous frame: skip return address; paramerers are pused as 8 byte..
+instance Show PhyRegister where
+  show (PhyReg r) = r
+  show (Stack n) = show (-((length usedRegs + n) * 8)) ++ "(%rbp)"
+  show (ArgStack n) = show ((n + 1) * 8 + 16) ++ "(%rbp)"
 
-showOperand :: Operand VRegister -> String
+-- stackAddress :: Int -> String
+-- stackAddress reg
+--   | reg >= 0 = show (-(reg * 4)) ++ "(%rbp)" -- current stack frame: skip previous base pointer
+--   | otherwise = show (-((reg + 1) * 8) + 16) ++ "(%rbp)" -- function parameters: previous frame: skip return address; parameters are pushed as 8 byte..
+
+showOperand :: Operand PhyRegister -> String
 showOperand (Imm a) = decConst a
-showOperand (Reg r) = stackAddress r
+showOperand (Reg r) = show r
 
 mov :: String -> String -> String
 mov from to = "movl " ++ from ++ ", " ++ to
