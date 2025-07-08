@@ -16,14 +16,14 @@ data PhyRegister = PhyReg String | Stack Int | ArgStack Int
 notUse = map PhyReg ["rax", "rbx", "rcx", "rdx", "rbp", "rsp"]
 
 -- This leaves
-usedRegs = map PhyReg ["rdi", "rsi"] ++ map (PhyReg . ('r' :) . show) [8 .. 15]
+usedRegs = map PhyReg ["edi", "esi"] ++ map (PhyReg . (\n -> 'r' : n ++ "d") . show) [8 .. 15]
 
 use = usedRegs ++ map Stack [1 ..]
 
 -- which are ALL CALLEE SAVED.
 -- We parse arguments via:
 argumentRegs :: [PhyRegister]
-argumentRegs = map PhyReg ["rax", "rbx", "rcx", "rdx"] ++ map ArgStack [1 ..]
+argumentRegs = map PhyReg ["eax", "ebx", "ecx", "edx"] ++ map ArgStack [1 ..]
 
 allocateRegisters :: (Ord t) => BBFunc t () -> (BBFunc PhyRegister (), Int)
 allocateRegisters f = (,maxStack) $ mvArgs $ fmapSameSup (\x -> Map.findWithDefault (Stack 0) x regAssignment) f

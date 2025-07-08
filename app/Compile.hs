@@ -30,7 +30,7 @@ compile job = do
   liftIO . putStrLn . unlines . map (showIRFunc . addLiveness) $ ir
   let asm = genAsm (fmap allocateRegisters ir)
   liftIO . putStrLn . enumLines $ asm
-  -- _ <- liftIO $ readProcess "gcc" ["-x", "assembler", "-", "-o", out job] asm
+  _ <- liftIO $ readProcess "gcc" ["-x", "assembler", "-", "-o", out job] asm
   return ()
 
 enumLines :: String -> String

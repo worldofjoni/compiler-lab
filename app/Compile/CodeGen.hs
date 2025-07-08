@@ -1,8 +1,11 @@
+{-# LANGUAGE InstanceSigs #-}
+
 module Compile.CodeGen (genAsm) where
 
 import Compile.AST (Op (..), UnOp (..))
 import Compile.Dataflow.RegAlloc (PhyRegister (..), usedRegs)
 import Compile.IR (BBFunc (BBFunc), BasicBlock (lines), IStmt (..), Operand (..), fmapSameExtra)
+import Data.Char (isDigit)
 import Data.Foldable (Foldable (toList))
 import qualified Data.Map as Map
 
@@ -16,12 +19,12 @@ genAsm = unlines . (preamble :) . toList . map (uncurry genFunc)
       where
         funcPreamble =
           ["func_" ++ name ++ ":", "push %rbp", "mov %rsp, %rbp", "sub $" ++ show (maxStack * 4) ++ ", %rsp"]
-            ++ ["push " ++ show r | r <- usedRegs]
+            ++ ["push " ++ (show . var64) r | r <- usedRegs]
     genBasicBlock :: String -> BasicBlock (IStmt PhyRegister) a -> String
-    genBasicBlock name b = name ++ ":\n" ++ (unlines . map genIStmt) (Compile.IR.lines b)
+    genBasicBlock name b = "bb_" ++ name ++ ":\n" ++ (unlines . map genIStmt) (Compile.IR.lines b)
     genIStmt :: IStmt PhyRegister -> String
     -- genIStmt (Label l) = unlines [l ++ ":"]
-    genIStmt (Goto l) = unlines ["jmp " ++ l]
+    genIStmt (Goto l) = unlines ["jmp bb_" ++ l]
     genIStmt (GotoIfNot l b) = unlines [mov (showOperand b) "%ecx", "cmpl $0, %ecx", "je " ++ l]
     genIStmt (x :<- (Imm i)) = mov (decConst i) (show x)
     genIStmt (x :<- (Reg r)) = unlines [mov (show r) "%eax", mov "%eax" (show x)]
@@ -122,7 +125,7 @@ genAsm = unlines . (preamble :) . toList . map (uncurry genFunc)
           mov "%eax" (show x)
         ]
     genIStmt Nop = ""
-    genIStmt (Return o) = unlines $ ["pop " ++ show r | r <- usedRegs] ++ [mov (showOperand o) "%eax", "leave", "ret"]
+    genIStmt (Return o) = unlines $ [mov (showOperand o) "%eax"] ++ ["pop " ++ (show . var64) r | r <- usedRegs] ++ ["leave", "ret"]
     genIStmt (CallIr mret name regs) =
       unlines $
         ["push " ++ show r | r <- reverse regs]
@@ -146,9 +149,14 @@ genCompare setInst x a b =
     ]
 
 instance Show PhyRegister where
-  show (PhyReg r) = r
+  show :: PhyRegister -> String
+  show (PhyReg r) = '%' : r
   show (Stack n) = show (-((length usedRegs + n) * 8)) ++ "(%rbp)"
   show (ArgStack n) = show ((n + 1) * 8 + 16) ++ "(%rbp)"
+
+var64 :: PhyRegister -> PhyRegister
+var64 (PhyReg x) = if isDigit $ x !! 1 then PhyReg (init $ x) else PhyReg ('r' : tail x)
+var64 x = x
 
 -- stackAddress :: Int -> String
 -- stackAddress reg
