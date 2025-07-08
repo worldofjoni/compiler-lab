@@ -68,22 +68,28 @@ popLoopContinue () = modify $ \s -> s {loopContinues = tail $ loopContinues s}
 -- -----------------------------------------------------------
 
 genFunct :: Function -> IRFunc
-genFunct (Func _ name _ block _) =
-  (name,) . code $
-    execState
-      ( do
-          genBlock block
-          commitAndNew [] ""
-      )
-      TranslateState
-        { nextReg = 0,
-          nextLabelNo = 0,
-          loopEnds = [],
-          loopContinues = [],
-          code = Map.empty,
-          currentLines = [],
-          currentLabel = name
-        }
+genFunct (Func _ name args block _) =
+  BBFunc
+    { funcName = name,
+      funcArgs = map (Left . snd) args :: [NameOrReg],
+      funcBlocks =
+        fmap (fmap (,()))
+          <$> code
+          $ execState
+            ( do
+                genBlock block
+                commitAndNew [] ""
+            )
+            TranslateState
+              { nextReg = 0,
+                nextLabelNo = 0,
+                loopEnds = [],
+                loopContinues = [],
+                code = Map.empty,
+                currentLines = [],
+                currentLabel = name
+              }
+    }
 
 -- todo
 

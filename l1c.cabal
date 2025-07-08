@@ -27,7 +27,8 @@ executable l1c
                   parser-combinators,
                   transformers,
                   process,
-                  array
+                  array,
+                  PSQueue
     other-modules:
                   Args,
                   Compile,
@@ -44,6 +45,8 @@ executable l1c
                   Compile.Dataflow.DFS,
                   Compile.Dataflow.Liveness,
                   Compile.Dataflow.SSA,
+                  Compile.Dataflow.Coloring,
+                  Compile.Dataflow.RegAlloc,
                   Error
     hs-source-dirs:   app
     default-language: Haskell2010

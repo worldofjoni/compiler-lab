@@ -14,7 +14,9 @@ type LiveVars t = Set.Set t
 
 type LivenessBlock t = BasicBlock (IStmt t, LiveVars t)
 
-type LivenessFunc t d = BBFunc (IStmt t, LiveVars t) d
+type LivenessFunc t = BBFunc t (LiveVars t)
+
+type Liveness t a = State (LivenessState t) a
 
 type Liveness t d a = State (LivenessState t d) a
 
@@ -24,17 +26,17 @@ data LivenessState t d = LivenessState
   }
   deriving (Show)
 
-addLiveness :: (Ord t) => BBFunc (IStmt t) d -> LivenessFunc t d
-addLiveness (name, bs) =
-  ( name,
-    blocks $ execState (updateAllUntilConvergence order) initialState
-  )
+addLiveness :: (Ord t) => BBFunc t a -> LivenessFunc t
+addLiveness f =
+  f
+    { funcBlocks = blocks $ execState (updateAllUntilConvergence order) initialState
+    }
   where
-    order = orderGraph bs name
+    order = orderGraph (funcBlocks f) (funcName f)
     addEmptyLiveVars b = b {Compile.IR.lines = map (,Set.empty) $ Compile.IR.lines b}
-    initialState = LivenessState {blocks = fmap addEmptyLiveVars bs, cashedInputs = Map.empty}
+    initialState = LivenessState {blocks = fmap (addEmptyLiveVars . fmap fst) (funcBlocks f), cashedInputs = Map.empty}
 
-updateAllUntilConvergence :: (Ord t) => [Label] -> Liveness t d ()
+updateAllUntilConvergence :: (Ord t) => [Label] -> Liveness t ()
 updateAllUntilConvergence order = do
   changed <- mapM update order
   Control.Monad.when (or changed) $ updateAllUntilConvergence order
@@ -55,8 +57,8 @@ update l = do
 
 outputOf :: Label -> Liveness t d (LiveVars t)
 outputOf l = do
-  bs <- gets blocks
-  return $ snd . head . Compile.IR.lines . unsafeLookup l $ bs
+  ls <- gets (Compile.IR.lines . unsafeLookup l . blocks)
+  return $ if null ls then Set.empty else snd . head $ ls
 
 unsafeLookup :: (Ord k) => k -> Map.Map k a -> a
 unsafeLookup k m = fromJust $ Map.lookup k m

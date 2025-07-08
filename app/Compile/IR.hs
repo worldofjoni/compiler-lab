@@ -1,5 +1,4 @@
 {-# LANGUAGE InstanceSigs #-}
-{-# LANGUAGE NamedFieldPuns #-}
 
 module Compile.IR where
 
@@ -17,24 +16,32 @@ type FrameSizes = Map.Map Label Int
 
 type IR = [IRFunc]
 
-type IRFunc = (String, Map.Map Label IRBasicBlock)
+showIRFunc :: (Show r, Show sup) => BBFunc r sup -> String
+showIRFunc f =
+  "function "
+    ++ funcName f
+    ++ "("
+    ++ (join . map show . funcArgs) f
+    ++ "):\n"
+    ++ (unlines . map (\(n, l) -> "==> " ++ n ++ ":\n" ++ show l) . Map.toList) (funcBlocks f)
+  where
+    join [] = ""
+    join [x] = x
+    join (x : xs) = x ++ ", " ++ join xs
 
-showIRFunc :: (Show l) => BBFunc l d -> [Char]
-showIRFunc (name, blocks) = "function " ++ name ++ ":\n" ++ (unlines . map (\(n, l) -> "==> " ++ n ++ ":\n" ++ show l) . Map.toList) blocks
+data BasicBlock line = BasicBlock {lines :: [line], successors :: [Label]}
 
-data BasicBlock line d = BasicBlock {lines :: [line], successors :: [Label], extra :: d}
-
-instance (Show l) => Show (BasicBlock l d) where
-  show :: (Show l) => BasicBlock l d -> String
-  show (BasicBlock lns suc _) = (unlines . map show $ lns) ++ "\nSuccs:\n" ++ show suc ++ "\n\n"
+instance (Show l) => Show (BasicBlock l) where
+  show :: (Show l) => BasicBlock l -> String
+  show (BasicBlock lns suc) = (unlines . map show $ lns) ++ "\nSuccs:\n" ++ show suc ++ "\n\n"
 
 type NameOrReg = Either VarName VRegister
 
-type BBIR line d = [BBFunc line d]
+data BBFunc r sup = BBFunc {funcName :: String, funcArgs :: [r], funcBlocks :: Map.Map Label (BasicBlock (IStmt r, sup))}
 
-type BBFunc line d = (String, Map.Map Label (BasicBlock line d))
+type IRFunc = BBFunc NameOrReg ()
 
-type IRBasicBlock = BasicBlock (IStmt NameOrReg) ()
+type IRBasicBlock = BasicBlock (IStmt NameOrReg)
 
 data Operand a = Reg a | Imm Integer
 
@@ -63,3 +70,24 @@ instance (Show a) => Show (IStmt a) where
   show (GotoIfNot l op) = "goto " ++ show l ++ " if not " ++ show op
   show (CallIr tgt l regs) = maybe "" ((++ " <- ") . show . Reg) tgt ++ "call " ++ l ++ "(" ++ (intercalate ", " . map (show . Reg)) regs ++ ")"
   show (Phi tgt ls) = show tgt ++ " <- Φ(" ++ intercalate ", " (map show ls) ++ ")"
+
+instance Functor Operand where
+  fmap f (Reg x) = Reg (f x)
+  fmap _ (Imm n) = Imm n
+
+instance Functor IStmt where
+  fmap f (Return op) = Return (fmap f op)
+  fmap f (x :<- y) = f x :<- (fmap f y)
+  fmap f (x :<-+ (a, op, b)) = f x :<-+ (fmap f a, op, fmap f b)
+  fmap f (Phi a xs) = Phi (f a) (map (fmap f) xs)
+  fmap f (Unary a op b) = Unary (f a) op (fmap f b)
+  fmap _ (Goto l) = Goto l
+  fmap f (GotoIfNot l x) = GotoIfNot l (fmap f x)
+  fmap f (CallIr x l xs) = CallIr (fmap f x) l (fmap f xs)
+  fmap _ Nop = Nop
+
+instance Functor BasicBlock where
+  fmap f b = b {Compile.IR.lines = map f (Compile.IR.lines b)}
+
+fmapSameSup :: (a -> b) -> BBFunc a sup -> BBFunc b sup
+fmapSameSup f func = func {funcArgs = map f $ funcArgs func, funcBlocks = fmap (\(x, y) -> (f <$> x, y)) <$> funcBlocks func}
