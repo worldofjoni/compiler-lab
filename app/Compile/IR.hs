@@ -5,6 +5,7 @@ module Compile.IR where
 import Compile.AST (Op, UnOp)
 import Data.List (intercalate)
 import qualified Data.Map as Map
+import Data.Maybe (mapMaybe)
 
 type VRegister = Int -- virtual register
 
@@ -49,6 +50,7 @@ data IStmt a
   = Return (Operand a)
   | a :<- (Operand a)
   | a :<-+ (Operand a, Op, Operand a)
+  | Operation (Operand a, Op, Operand a)
   | Phi a [Operand a]
   | Unary a UnOp (Operand a)
   | Goto Label
@@ -64,6 +66,7 @@ instance (Show a) => Show (IStmt a) where
   show (Return op) = "ret " ++ show op
   show (r :<- s) = show (Reg r) ++ " <- " ++ show s
   show (r :<-+ (s1, op, s2)) = show (Reg r) ++ " <- " ++ show s1 ++ " " ++ show op ++ " " ++ show s2
+  show (Operation (s1, op, s2)) = "_ <- " ++ show s1 ++ " " ++ show op ++ " " ++ show s2
   show (Unary r op s) = show (Reg r) ++ " <- " ++ show op ++ show s
   show Nop = "nop"
   show (Goto l) = "goto " ++ show l
@@ -79,6 +82,7 @@ instance Functor IStmt where
   fmap f (Return op) = Return (fmap f op)
   fmap f (x :<- y) = f x :<- (fmap f y)
   fmap f (x :<-+ (a, op, b)) = f x :<-+ (fmap f a, op, fmap f b)
+  fmap f (Operation (a, op, b)) = Operation (fmap f a, op, fmap f b)
   fmap f (Phi a xs) = Phi (f a) (map (fmap f) xs)
   fmap f (Unary a op b) = Unary (f a) op (fmap f b)
   fmap _ (Goto l) = Goto l
@@ -91,3 +95,12 @@ fmapSameExtra f b = b {Compile.IR.lines = map f (Compile.IR.lines b)}
 
 fmapSameSup :: (a -> b) -> BBFunc a sup -> BBFunc b sup
 fmapSameSup f func = func {funcArgs = map f $ funcArgs func, funcBlocks = fmapSameExtra (\(x, y) -> (f <$> x, y)) <$> funcBlocks func}
+
+rmSup :: BBFunc a sup -> BBFunc a ()
+rmSup func = func {funcBlocks = fmapSameExtra (\(x, _) -> (x, ())) <$> funcBlocks func}
+
+maybeMapStmts :: ((IStmt a, sup) -> Maybe (IStmt a, sup)) -> BBFunc a sup -> BBFunc a sup
+maybeMapStmts f func = func {funcBlocks = Map.map (blockMap f) (funcBlocks func)}
+  where
+    blockMap :: ((IStmt a, sup) -> Maybe (IStmt a, sup)) -> BasicBlock (IStmt a, sup) e -> BasicBlock (IStmt a, sup) e
+    blockMap f b = b {Compile.IR.lines = mapMaybe f (Compile.IR.lines b)}

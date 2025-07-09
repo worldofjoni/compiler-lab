@@ -133,6 +133,27 @@ genAsm = unlines . (preamble :) . toList . map (uncurry genFunc)
           ++ maybe [] (pure . mov "%eax" . show) mret
           ++ ["pop %rax" | _ <- regs]
     genIStmt (Phi {}) = error "Phi nodes should be eliminated before code gen"
+    genIStmt (Operation (a, Mul, b)) =
+      unlines
+        [ mov (showOperand a) "%eax",
+          mov (showOperand b) "%ebx",
+          "imul %eax, %ebx"
+        ]
+    genIStmt (Operation (a, Div, b)) =
+      unlines
+        [ mov (showOperand a) "%eax",
+          "cdq",
+          mov (showOperand b) "%ecx",
+          "idiv %ecx"
+        ]
+    genIStmt (Operation (a, Mod, b)) =
+      unlines
+        [ mov (showOperand a) "%eax",
+          "cdq",
+          mov (showOperand b) "%ecx",
+          "idiv %ecx"
+        ]
+    genIStmt (Operation _) = error "side effect-free operations should have been eliminated before code gen"
 
 -- genIStmt (FunctionLabel name) =
 -- unlines

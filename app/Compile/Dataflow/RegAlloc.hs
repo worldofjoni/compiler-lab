@@ -3,6 +3,7 @@
 module Compile.Dataflow.RegAlloc (PhyRegister (..), allocateRegisters, usedRegs) where
 
 import Compile.Dataflow.Coloring (Coloring, color, interferenceGraph)
+import Compile.Dataflow.DeadCode (eliminateDeadCode)
 import Compile.Dataflow.Liveness (addLiveness)
 import Compile.IR
 import Data.List (sort)
@@ -26,9 +27,10 @@ argumentRegs :: [PhyRegister]
 argumentRegs = map PhyReg ["eax", "ebx", "ecx", "edx"] ++ map ArgStack [1 ..]
 
 allocateRegisters :: (Ord t) => BBFunc t () -> (BBFunc PhyRegister (), Int)
-allocateRegisters f = (,maxStack) $ mvArgs $ fmapSameSup (\x -> Map.findWithDefault (Stack 0) x regAssignment) f
+allocateRegisters f = (,maxStack) . mvArgs . fmapSameSup (\x -> Map.findWithDefault (Stack 0) x regAssignment) . rmSup . eliminateDeadCode $ fWithLiveness
   where
-    c = color . interferenceGraph . addLiveness $ f
+    fWithLiveness = addLiveness f
+    c = color . interferenceGraph $ fWithLiveness
     regAssignment = assignRegisters c
     maxStack = maximum . (0 :) . mapMaybe stackNum $ Map.elems regAssignment :: Int
     stackNum r = case r of (Stack n) -> Just n; _ -> Nothing

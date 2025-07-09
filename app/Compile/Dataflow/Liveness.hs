@@ -74,6 +74,7 @@ nowLive :: (Ord t) => IStmt t -> LiveVars t -> LiveVars t
 nowLive (x :<- Imm _) = Set.delete x
 nowLive (x :<- Reg y) = Set.insert y . Set.delete x
 nowLive (x :<-+ (a, _, b)) = insertIfReg a . insertIfReg b . Set.delete x
+nowLive (Operation (a, _, b)) = insertIfReg a . insertIfReg b
 nowLive (Unary x _ a) = insertIfReg a . Set.delete x
 nowLive Nop = id
 nowLive (CallIr (Just x) _ params) = Set.union (Set.fromList params) . Set.delete x
