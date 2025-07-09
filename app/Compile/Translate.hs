@@ -143,6 +143,7 @@ genStmt (While condition body _) = do
   pushLoopEnd endLabel
   pushLoopContinue loopCond
   genStmt body
+  emit $ Goto loopCond
   popLoopEnd ()
   popLoopContinue ()
   emit $ Goto loopCond
@@ -160,11 +161,12 @@ genStmt (For initSimp condition after body _) = do
   pushLoopContinue continueLabel
   pushLoopEnd endLabel
   genStmt body
+  emit $ Goto loopLabel
   commitAndNew [continueLabel] continueLabel
   maybeGenSimp after
   popLoopContinue ()
   popLoopEnd ()
-  emit $ Goto loopLabel
+  emit $ Goto loopCondLabel
   commitAndNew [loopLabel, endLabel] endLabel
 genStmt (Break _) = do
   end <- gets (head . loopEnds)

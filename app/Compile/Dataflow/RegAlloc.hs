@@ -27,7 +27,7 @@ argumentRegs :: [PhyRegister]
 argumentRegs = map PhyReg ["eax", "ebx", "ecx", "edx"] ++ map ArgStack [1 ..]
 
 allocateRegisters :: (Ord t) => BBFunc t () -> (BBFunc PhyRegister (), Int)
-allocateRegisters f = (,maxStack) . mvArgs . fmapSameSup (\x -> Map.findWithDefault (Stack 0) x regAssignment) . rmSup . eliminateDeadCode $ fWithLiveness
+allocateRegisters f = (,maxStack) . mvArgs . fmapSameSup (\x -> Map.findWithDefault (PhyReg "eax") x regAssignment) . rmSup . eliminateDeadCode $ fWithLiveness
   where
     fWithLiveness = addLiveness f
     c = color . interferenceGraph $ fWithLiveness

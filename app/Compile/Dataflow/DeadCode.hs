@@ -3,6 +3,8 @@ module Compile.Dataflow.DeadCode (eliminateDeadCode) where
 import Compile.AST (Op (..))
 import Compile.Dataflow.Liveness (LivenessFunc)
 import Compile.IR
+import qualified Data.Map as Map
+import Data.Maybe (fromJust)
 import qualified Data.Set as Set
 
 eliminateDeadCode :: (Ord t) => LivenessFunc t -> LivenessFunc t
@@ -21,10 +23,11 @@ rmWriteToDead = maybeMapStmts rmWrite . shiftLivenessUp
 shiftLivenessUp :: (Ord t) => LivenessFunc t -> LivenessFunc t
 shiftLivenessUp f = f {funcBlocks = shiftBlock <$> funcBlocks f}
   where
-    shiftBlock b = b {Compile.IR.lines = shift $ Compile.IR.lines b}
-    shift ((s1, _) : ss@((_, l2) : _)) = (s1, l2) : shift ss
-    shift [(s, _)] = [(s, Set.empty)]
-    shift [] = []
+    shiftBlock b = b {Compile.IR.lines = shift (Set.unions [outputOf s | s <- successors b]) $ Compile.IR.lines b}
+    outputOf s = snd . head . Compile.IR.lines . fromJust . Map.lookup s $ funcBlocks f
+    shift inital ((s1, _) : ss@((_, l2) : _)) = (s1, l2) : shift inital ss
+    shift inital [(s, _)] = [(s, inital)]
+    shift inital [] = []
 
 hasSideEffects :: Op -> Bool
 hasSideEffects = (`elem` [Mul, Div, Mod])
