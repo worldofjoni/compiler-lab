@@ -213,14 +213,14 @@ ret = do
 
 expr' :: Parser Expr
 expr' =
-  lvalueExpr
-    <|> parens expr
-    <|> nullExpr
+  nullExpr
+    <|> intExpr
+    <|> boolExpr
     <|> (uncurry AllocArray <$ reserved "alloc_array" <*> tuple parseType expr)
     <|> (Alloc <$ reserved "alloc" <*> parens parseType)
     <|> try (uncurry3 Call <$> parseCall)
-    <|> intExpr
-    <|> boolExpr
+    <|> try lvalueExpr
+    <|> parens expr
 
 tuple :: Parser a -> Parser b -> Parser (a, b)
 tuple a b = parens ((,) <$> a <* symbol "," <*> b)
