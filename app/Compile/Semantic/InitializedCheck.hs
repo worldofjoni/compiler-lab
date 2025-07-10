@@ -116,8 +116,8 @@ checkStmt (Ret e _) = checkExpr e >> defineAll
 checkSimp :: Simp -> L1InitCheck ()
 checkSimp (Decl _ name _) = declare name
 checkSimp (Init _ name e _) = checkExpr e >> declare name >> define name
-checkSimp (Asgn (Var target) Nothing expr _) = checkExpr expr >> define target
-checkSimp (Asgn (Var target) (Just _) expr pos) = assertDefined target pos >> checkExpr expr
+checkSimp (Asgn (Var target _) Nothing expr _) = checkExpr expr >> define target
+checkSimp (Asgn (Var target _) (Just _) expr pos) = assertDefined target pos >> checkExpr expr
 checkSimp (SimpCall _ args _) = mapM_ checkExpr args
 checkSimp (Asgn lv Nothing e pos) = checkLValue lv pos >> checkExpr e
 checkSimp (Asgn lv (Just _) e pos) = checkLValue lv pos >> checkExpr e
@@ -125,7 +125,10 @@ checkSimp (Asgn lv (Just _) e pos) = checkLValue lv pos >> checkExpr e
 checkExpr :: Expr -> L1InitCheck ()
 checkExpr (IntExpr _ _) = pure ()
 checkExpr (BoolExpr _ _) = pure ()
-checkExpr (LValueExpr (Var name) pos) = assertDefined name pos
+checkExpr (VarExpr name pos) = assertDefined name pos
+checkExpr (FieldE s _) = checkExpr s
+checkExpr (ArrayAccessE a e) = checkExpr a >> checkExpr e
+checkExpr (DerefE e) = checkExpr e
 checkExpr (BinExpr e1 _ e2) = checkExpr e1 >> checkExpr e2
 checkExpr (UnExpr _ e) = checkExpr e
 checkExpr (Ternary a b c) = checkExpr a >> checkExpr b >> checkExpr c
@@ -133,10 +136,9 @@ checkExpr (Call _ args _) = mapM_ checkExpr args
 checkExpr (Null _) = pure ()
 checkExpr (Alloc _) = pure ()
 checkExpr (AllocArray _ e) = checkExpr e
-checkExpr (LValueExpr lv pos) = checkLValue lv pos
 
 checkLValue :: LValue -> SourcePos -> L1InitCheck ()
 checkLValue (ArrayAccess lv e) pos = checkLValue lv pos >> checkExpr e
 checkLValue (Field lv _) pos = checkLValue lv pos
 checkLValue (Deref lv) pos = checkLValue lv pos
-checkLValue (Var name) pos = assertDefined name pos
+checkLValue (Var name p) _ = assertDefined name p

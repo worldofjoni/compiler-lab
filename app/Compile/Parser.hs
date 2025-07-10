@@ -146,21 +146,33 @@ parseBreak = do
 simp :: Parser Simp
 simp = try decl <|> try asign <|> (uncurry3 SimpCall <$> parseCall)
 
-lvalue' :: Parser LValue
-lvalue' =
-  try (Var <$> identifier)
-    <|> parens lvalue
-    <|> (Deref <$ symbol "*" <*> lvalue)
-
 lvalue :: Parser LValue
 lvalue =
   do
-    lv <- lvalue'
+    lv <-
+      try (flip Var <$> getSourcePos <*> identifier)
+        <|> parens lvalue
+        <|> (Deref <$ symbol "*" <*> lvalue)
     exts <-
       many $
         (flip Field <$ symbol "." <*> identifier)
           <|> ((\i l -> Field (Deref l) i) <$ symbol "->" <*> identifier)
           <|> (flip ArrayAccess <$> brackets expr)
+    pure $ foldl (flip ($)) lv exts
+    <?> "lvalue"
+
+lvalueE :: Parser Expr
+lvalueE =
+  do
+    lv <-
+      try (flip VarExpr <$> getSourcePos <*> identifier)
+        <|> parens expr
+        <|> (DerefE <$ symbol "*" <*> expr)
+    exts <-
+      many $
+        (flip FieldE <$ symbol "." <*> identifier)
+          <|> ((\i l -> FieldE (DerefE l) i) <$ symbol "->" <*> identifier)
+          <|> (flip ArrayAccessE <$> brackets expr)
     pure $ foldl (flip ($)) lv exts
     <?> "lvalue"
 
@@ -219,7 +231,7 @@ expr' =
     <|> (uncurry AllocArray <$ reserved "alloc_array" <*> tuple parseType expr)
     <|> (Alloc <$ reserved "alloc" <*> parens parseType)
     <|> try (uncurry3 Call <$> parseCall)
-    <|> try lvalueExpr
+    <|> try lvalueE
     <|> parens expr
 
 tuple :: Parser a -> Parser b -> Parser (a, b)
@@ -242,12 +254,6 @@ nullExpr = do
   pos <- getSourcePos
   reserved "NULL"
   return $ Null pos
-
-lvalueExpr :: Parser Expr
-lvalueExpr = do
-  pos <- getSourcePos
-  val <- lvalue
-  return $ LValueExpr val pos
 
 opTable :: [[Operator Parser Expr]]
 opTable =

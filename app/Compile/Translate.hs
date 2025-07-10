@@ -194,7 +194,7 @@ maybeGenSimp = maybeGenStmt . fmap SimpStmt
 toOperand :: Expr -> Translate (Operand NameOrReg)
 toOperand (IntExpr n _) = pure . Imm . read $ n
 toOperand (BoolExpr b _) = pure . Imm . boolToInt $ b
-toOperand (LValueExpr (Var name) _) = do
+toOperand (VarExpr name _) = do
   return . Reg . Left $ name
 toOperand e = do
   t <- freshReg
@@ -210,7 +210,7 @@ assignTo d (IntExpr n _) = do
   emit $ d :<- Imm (read n)
 assignTo d (BoolExpr b _) = do
   emit $ d :<- Imm (boolToInt b)
-assignTo d (LValueExpr (Var name) _) = do
+assignTo d (VarExpr name _) = do
   emit $ d :<- Reg (Left name)
 assignTo d (UnExpr op e) = do
   x <- toOperand e

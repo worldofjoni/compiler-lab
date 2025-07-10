@@ -1,3 +1,5 @@
+{-# LANGUAGE InstanceSigs #-}
+
 module Compile.AST where
 
 import Data.List (intercalate)
@@ -33,7 +35,8 @@ data Type
   | StructType Ident
   | PointerType Type
   | ArrayType Type
-  deriving (Eq, Ord)
+  | AnyPointer
+  deriving (Ord)
 
 isSmall :: Type -> Bool
 isSmall IntType = True
@@ -41,6 +44,24 @@ isSmall BoolType = True
 isSmall (PointerType _) = True
 isSmall (ArrayType _) = True
 isSmall (StructType _) = False
+isSmall AnyPointer = True
+
+instance Eq Type where
+  (==) :: Type -> Type -> Bool
+  AnyPointer == AnyPointer = True
+  AnyPointer == (PointerType _) = True
+  (PointerType _) == AnyPointer = True
+  IntType == IntType = True
+  BoolType == BoolType = True
+  (PointerType t) == (PointerType u) = t == u
+  (ArrayType t) == (ArrayType u) = t == u
+  (StructType t) == (StructType u) = t == u
+  _ == _ = False
+
+isPointer :: Type -> Bool
+isPointer (PointerType _) = True
+isPointer AnyPointer = True
+isPointer _ = False
 
 instance Show Type where
   show IntType = "int"
@@ -48,6 +69,7 @@ instance Show Type where
   show (StructType name) = "struct " ++ name
   show (PointerType t) = show t ++ "*"
   show (ArrayType t) = show t ++ "[]"
+  show AnyPointer = "void*"
 
 data Stmt
   = SimpStmt Simp
@@ -60,8 +82,14 @@ data Stmt
   | Ret Expr SourcePos
   deriving (Show)
 
-data LValue = Var Ident | Field LValue Ident | Deref LValue | ArrayAccess LValue Expr
+data LValue = Var Ident SourcePos | Field LValue Ident | Deref LValue | ArrayAccess LValue Expr
   deriving (Show)
+
+lvalueToExpr :: LValue -> Expr
+lvalueToExpr (Var n p) = VarExpr n p
+lvalueToExpr (Field l i) = FieldE (lvalueToExpr l) i
+lvalueToExpr (Deref l) = DerefE $ lvalueToExpr l
+lvalueToExpr (ArrayAccess a e) = ArrayAccessE (lvalueToExpr a) e
 
 data Simp
   = Decl Type String SourcePos
@@ -79,7 +107,10 @@ data Expr
   = IntExpr String SourcePos
   | BoolExpr Bool SourcePos
   | Null SourcePos
-  | LValueExpr LValue SourcePos
+  | VarExpr Ident SourcePos
+  | FieldE Expr Ident
+  | DerefE Expr
+  | ArrayAccessE Expr Expr
   | BinExpr Expr Op Expr
   | UnExpr UnOp Expr
   | Ternary Expr Expr Expr
