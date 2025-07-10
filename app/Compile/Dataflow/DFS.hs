@@ -34,6 +34,6 @@ orderGraphInternal label = do
 naturalSuccessorOrder :: BasicBlock (IStmt t, s) d -> [Label]
 naturalSuccessorOrder block = if length (successors block) <= 2 then catMaybes [natural, alt] else error "no basic block should have more than 2 successors"
   where
-    alt = case fst . last . Compile.IR.lines $ block of GotoIfNot l _ -> Just l; _ -> Nothing
+    alt = case fmap fst . saveHead . reverse . Compile.IR.lines $ block of Just (GotoIfNot l _) -> Just l; _ -> Nothing
     natural = saveHead . filter (\s -> Just s /= alt) $ successors block
     saveHead xs = if null xs then Nothing else Just $ head xs
