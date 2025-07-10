@@ -15,6 +15,7 @@ import qualified Data.Set as Set
 import Data.Tuple (swap)
 import Error (L1ExceptT, semanticFail)
 import Text.Megaparsec (SourcePos, sourcePosPretty)
+import Debug.Trace (traceShow, traceShowM)
 
 data VariableStatus
   = Declared
@@ -235,7 +236,7 @@ exprType (BinExpr e1 op e2) = do
       if t1 == IntType && op `elem` intToIntOp
         then pure IntType
         else
-          if (t1 == BoolType && op `elem` boolToBoolOp) || (isPointer t1 && op `elem` ptrToBoolOp)
+          if (t1 == BoolType && op `elem` boolToBoolOp) || ((isPointer t1 || isArray t1) && op `elem` ptrToBoolOp)
             then pure BoolType
             else semanticFail' $ "Operator " ++ show op ++ " cannot be applied to " ++ show t1 ++ " and " ++ show t2
 exprType (UnExpr Not e) = exprType e >>= assertType BoolType

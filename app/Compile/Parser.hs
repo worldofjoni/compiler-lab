@@ -161,21 +161,6 @@ lvalue =
     pure $ foldl (flip ($)) lv exts
     <?> "lvalue"
 
-lvalueE :: Parser Expr
-lvalueE =
-  do
-    lv <-
-      try (flip VarExpr <$> getSourcePos <*> identifier)
-        <|> parens expr
-        <|> (DerefE <$ symbol "*" <*> expr)
-    exts <-
-      many $
-        (flip FieldE <$ symbol "." <*> identifier)
-          <|> ((\i l -> FieldE (DerefE l) i) <$ symbol "->" <*> identifier)
-          <|> (flip ArrayAccessE <$> brackets expr)
-    pure $ foldl (flip ($)) lv exts
-    <?> "lvalue"
-
 decl :: Parser Simp
 decl = do
   pos <- getSourcePos
@@ -223,17 +208,6 @@ ret = do
   semi
   return $ Ret e pos
 
-expr' :: Parser Expr
-expr' =
-  nullExpr
-    <|> intExpr
-    <|> boolExpr
-    <|> (uncurry AllocArray <$ reserved "alloc_array" <*> tuple parseType expr)
-    <|> (Alloc <$ reserved "alloc" <*> parens parseType)
-    <|> try (uncurry3 Call <$> parseCall)
-    <|> try lvalueE
-    <|> parens expr
-
 tuple :: Parser a -> Parser b -> Parser (a, b)
 tuple a b = parens ((,) <$> a <* symbol "," <*> b)
 
@@ -257,7 +231,8 @@ nullExpr = do
 
 opTable :: [[Operator Parser Expr]]
 opTable =
-  [ [manyUnaryOp [(Neg, "-"), (Not, "!"), (BitNot, "~")]],
+  [ [Prefix (DerefE <$ symbol "*")],
+    [manyUnaryOp [(Neg, "-"), (Not, "!"), (BitNot, "~")]],
     [infix_ Mul "*", infix_ Div "/", infix_ Mod "%"],
     [infix_ Add "+", infix_ Sub "-"],
     [infix_ Shl "<<", infix_ Shr ">>"],
@@ -279,6 +254,26 @@ opTable =
 
 expr :: Parser Expr
 expr = makeExprParser expr' opTable <?> "expression"
+
+expr' :: Parser Expr
+expr' = do
+  e <-
+    intExpr
+      <|> boolExpr
+      <|> parens expr
+      <|> try varExpr
+      <|> try (uncurry AllocArray <$ reserved "alloc_array" <*> tuple parseType expr)
+      <|> try (Alloc <$ reserved "alloc" <*> parens parseType)
+      <|> try (uncurry3 Call <$> parseCall)
+  exts <-
+    many $
+      (flip FieldE <$ symbol "." <*> identifier)
+        <|> ((\i l -> FieldE (DerefE l) i) <$ symbol "->" <*> identifier)
+        <|> (flip ArrayAccessE <$> brackets expr)
+  pure $ foldl (flip ($)) e exts
+
+varExpr :: Parser Expr
+varExpr = flip VarExpr <$> getSourcePos <*> identifier
 
 -- Lexer starts here, probably worth moving to its own file at some point
 sc :: Parser ()

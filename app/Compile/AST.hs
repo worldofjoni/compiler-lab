@@ -63,6 +63,10 @@ isPointer (PointerType _) = True
 isPointer AnyPointer = True
 isPointer _ = False
 
+isArray :: Type -> Bool
+isArray (ArrayType _) = True
+isArray _ = False
+
 instance Show Type where
   show IntType = "int"
   show BoolType = "bool"
