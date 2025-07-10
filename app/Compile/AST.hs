@@ -35,6 +35,13 @@ data Type
   | ArrayType Type
   deriving (Eq, Ord)
 
+isSmall :: Type -> Bool
+isSmall IntType = True
+isSmall BoolType = True
+isSmall (PointerType _) = True
+isSmall (ArrayType _) = True
+isSmall (StructType _) = False
+
 instance Show Type where
   show IntType = "int"
   show BoolType = "bool"

@@ -31,7 +31,7 @@ functionSignatures ast = do
   let sigs = map sig ast ++ predefined
   let names = map fst sigs
   let sigMap = Map.fromList $ sigs
-  mapM_ checkParamDistinctness ast
+  mapM_ checkParams ast
   unless (distinct names) (semanticFail "function names are not distinct")
   unless ("main" `elem` names) (semanticFail "no main function")
   unless (fromJust (Map.lookup "main" sigMap) == (IntType, [])) (semanticFail "main must return int and have no parameters")
@@ -40,8 +40,11 @@ functionSignatures ast = do
     sig (Func ret name params _ _) = (name, (ret, map fst params))
     predefined = [("print", (IntType, [IntType])), ("read", (IntType, [])), ("flush", (IntType, []))]
 
-checkParamDistinctness :: Function -> L1ExceptT ()
-checkParamDistinctness (Func _ name params _ pos) = unless (distinct . map snd $ params) (semanticFail $ "parameters of function " ++ name ++ " do not have distinct names at " ++ sourcePosPretty pos)
+checkParams :: Function -> L1ExceptT ()
+checkParams (Func ret name params _ pos) = do
+  unless (distinct . map snd $ params) (semanticFail $ "parameters of function " ++ name ++ " do not have distinct names at " ++ sourcePosPretty pos)
+  unless (isSmall ret) . semanticFail $ "Function return types need to be small, but `" ++ show ret ++ "` is not at " ++ posPretty pos
+  mapM_ (\(ty, _) -> unless (isSmall ty) . semanticFail $ "Function parameters need to be small types, but " ++ show ty ++ " is not at " ++ posPretty pos) params
 
 distinct :: [String] -> Bool
 distinct l = and $ zipWith (/=) sorted (tail sorted)
@@ -104,7 +107,7 @@ declare name ty =
 -- + function calls
 checkStmt :: Stmt -> L1TypeCheck ()
 checkStmt (Ret e _) = do
-  t <- gets (currRetType)
+  t <- gets currRetType
   checkExpr t e
 checkStmt (SimpStmt s) = checkSimp s
 checkStmt (BlockStmt b _) =
@@ -141,12 +144,14 @@ checkCall mRetType name args pos = do
 
 checkSimp :: Simp -> L1TypeCheck ()
 checkSimp (Decl ty name pos) = do
+  unless (isSmall ty) . semanticFail' $ "Local variables need to be small types, but " ++ show ty ++ " is not at " ++ posPretty pos
   isDeclared <- gets (Map.member name . namespace)
   when isDeclared $
     semanticFail' $
       "Variable " ++ name ++ " redeclared at: " ++ posPretty pos
   declare name ty
 checkSimp (Init ty name e pos) = do
+  unless (isSmall ty) . semanticFail' $ "Local variables need to be small types, but " ++ show ty ++ " is not at " ++ posPretty pos
   isDeclared <- gets (Map.member name . namespace)
   when isDeclared $
     semanticFail' $
@@ -155,9 +160,11 @@ checkSimp (Init ty name e pos) = do
   declare name ty
 checkSimp (Asgn lv Nothing e pos) = do
   ty <- lvalueType lv pos
+  unless (isSmall ty) . semanticFail' $ "Lvalue needs to be small type, but " ++ show ty ++ " is large at " ++ posPretty pos
   checkExpr ty e
 checkSimp (Asgn lv (Just op) e pos) = do
   ty <- lvalueType lv pos
+  unless (isSmall ty) . semanticFail' $ "Lvalue needs to be small type, but " ++ show ty ++ " is large at " ++ posPretty pos
   case ty of
     IntType -> checkExpr IntType e
     _ -> semanticFail' $ show op ++ " does not work on " ++ show ty ++ ", only int at: " ++ posPretty pos
