@@ -214,6 +214,7 @@ ret = do
 expr' :: Parser Expr
 expr' =
   parens expr
+    <|> nullExpr
     <|> (uncurry AllocArray <$ reserved "alloc_array" <*> tuple parseType expr)
     <|> (Alloc <$ reserved "alloc" <*> parens parseType)
     <|> try (uncurry3 Call <$> parseCall)
@@ -235,6 +236,12 @@ boolExpr = do
   pos <- getSourcePos
   value <- True <$ reserved "true" <|> False <$ reserved "false"
   return $ BoolExpr value pos
+
+nullExpr :: Parser Expr
+nullExpr = do
+  pos <- getSourcePos
+  reserved "NULL"
+  return $ Null pos
 
 lvalueExpr :: Parser Expr
 lvalueExpr = do
