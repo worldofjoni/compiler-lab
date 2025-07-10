@@ -42,7 +42,7 @@ astParser = do
 
 parseDefinition :: Parser Definition
 parseDefinition =
-  (Struct <$> parseStructDef)
+  (Struct <$> try parseStructDef)
     <|> (Function <$> parseFunction)
 
 parseStructDef :: Parser StructDef
