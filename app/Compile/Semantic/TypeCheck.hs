@@ -4,6 +4,7 @@
 module Compile.Semantic.TypeCheck (varStatusAnalysis) where
 
 import Compile.AST
+import Compile.Parser (parseNumber)
 import Control.Monad (unless, void, when, zipWithM_)
 import Control.Monad.State
 import Data.Foldable (traverse_)
@@ -194,7 +195,13 @@ lookupStruct name field = do
 --       ++ posPretty pos
 
 exprType :: Expr -> L1TypeCheck Type
-exprType (IntExpr _ _) = pure IntType
+exprType (IntExpr str pos) = do
+  -- Check that literals are in bounds
+  let res = parseNumber str
+  case res of
+    Left e -> do
+      semanticFail' $ "Error in " ++ posPretty pos ++ e
+    Right _ -> return IntType
 exprType (BoolExpr _ _) = pure BoolType
 exprType (Null _) = pure AnyPointer
 exprType (VarExpr name p) =
@@ -210,10 +217,13 @@ exprType (DerefE e) = do
   case t of
     PointerType ty -> pure ty
     _ -> semanticFail' $ "Expected pointer, found " ++ show t
-exprType (ArrayAccessE _ e) = do
-  t <- exprType e
+exprType (ArrayAccessE arr e) = do
+  t <- exprType arr
   case t of
-    ArrayType ty -> pure ty
+    ArrayType ty -> do
+      ety <- exprType e
+      unless (ety == IntType) . semanticFail' $ "Expected int for array access, got " ++ show ety
+      pure ty
     _ -> semanticFail' $ "Expected array, found " ++ show t
 exprType (BinExpr e1 op e2) = do
   t1 <- exprType e1
