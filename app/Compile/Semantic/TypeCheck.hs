@@ -8,7 +8,7 @@ import Control.Monad.Trans.Except (catchE)
 import Data.Foldable (traverse_)
 import Data.List (sort)
 import qualified Data.Map as Map
-import Data.Maybe (fromJust, fromMaybe)
+import Data.Maybe (fromJust, fromMaybe, isJust)
 import qualified Data.Set as Set
 import Data.Tuple (swap)
 import Error (L1ExceptT, semanticFail)
@@ -234,9 +234,13 @@ checkExpr BoolType (BinExpr lhs op rhs) = do
           catchE
             (bool ns)
             ( \e2 ->
-                if op `elem` boolToBoolOp ++ intToBoolOp
-                  then semanticFail $ "Operator " ++ show op ++ " does neigher accept int nor bool:\n" ++ show e1 ++ "\n" ++ show e2
-                  else failOp
+                catchE
+                  (ptr ns)
+                  ( \e3 ->
+                      if op `elem` boolToBoolOp ++ intToBoolOp ++ ptrToBoolOp
+                        then semanticFail $ "Operator " ++ show op ++ " requieres two bools, ints, or compatible pointers:\n" ++ show e1 ++ "\n" ++ show e2 ++ "\n" ++ show e3
+                        else failOp
+                  )
             )
       )
   where
@@ -249,6 +253,10 @@ checkExpr BoolType (BinExpr lhs op rhs) = do
       evalStateT $ do
         unless (op `elem` boolToBoolOp) $ semanticFail' ""
         checkExpr BoolType lhs >> checkExpr BoolType rhs
+    ptr = evalStateT $ do
+      unless (op `elem` ptrToBoolOp) $ semanticFail' ""
+      comp <- isCompatiplePointerExpr lhs rhs
+      unless comp $ semanticFail' ""
     failOp =
       semanticFail $
         "Operator " ++ show op ++ " does not produce an bool."
@@ -276,11 +284,48 @@ checkExpr t (AllocArray _ _) = semanticFail' $ "Cannot allocate array into " ++ 
 checkExpr (PointerType _) _ = semanticFail' "no pointer arithmetric"
 checkExpr (ArrayType _) _ = semanticFail' "no array arithmetric"
 
+isCompatiplePointerExpr :: Expr -> Expr -> L1TypeCheck Bool
+isCompatiplePointerExpr (Null _) (Null _) = pure True
+isCompatiplePointerExpr e n@(Null _) = isCompatiplePointerExpr n e
+isCompatiplePointerExpr (Null _) e = isJust <$> isPointerTo e
+isCompatiplePointerExpr e1 e2 = do
+  p1 <- isPointerTo e1
+  p2 <- isPointerTo e2
+  case p1 of 
+    Nothing -> pure False
+    Just _ -> pure (p1 == p2)
+
+-- todo
+
+-- may panic for some expressions
+isPointerTo :: Expr -> L1TypeCheck (Maybe Type)
+isPointerTo (LValueExpr lv pos) = do
+  ty <- lvalueType lv pos
+  pure (isPointerTo' ty)
+isPointerTo (Ternary _ a _b) = isPointerTo a
+isPointerTo (Call name _ _) = do
+  ty <- getFunctionReturnType name
+  pure $ isPointerTo' ty
+isPointerTo (Alloc ty) = pure (Just ty)
+isPointerTo (Null _) = error "cannt call on that!"
+isPointerTo _ = pure Nothing
+
+isPointerTo' :: Type -> Maybe Type
+isPointerTo' (PointerType t) = Just t
+isPointerTo' _ = Nothing
+
+getFunctionReturnType :: String -> L1TypeCheck Type
+getFunctionReturnType name = do
+  gets (fst . fromJust . Map.lookup name . signature)
+
 intToBoolOp :: [Op]
 intToBoolOp = [Lt, Le, Gt, Ge, Eq, Neq]
 
 boolToBoolOp :: [Op]
 boolToBoolOp = [And, Or, Eq, Neq]
+
+ptrToBoolOp :: [Op]
+ptrToBoolOp = [Eq, Neq]
 
 intToIntOp :: [Op]
 intToIntOp = [Add, Sub, Mul, Div, Mod, Shl, Shr, BitOr, BitAnd, BitXor]
