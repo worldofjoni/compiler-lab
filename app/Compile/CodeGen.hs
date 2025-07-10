@@ -3,8 +3,9 @@
 module Compile.CodeGen (genAsm) where
 
 import Compile.AST (Op (..), UnOp (..))
+import Compile.Dataflow.DFS (orderGraph)
 import Compile.Dataflow.RegAlloc (PhyRegister (..), usedRegs)
-import Compile.IR (BBFunc (BBFunc), BasicBlock (lines), IStmt (..), Operand (..), fmapSameExtra)
+import Compile.IR (BBFunc (BBFunc), BasicBlock (lines), IStmt (..), Label, Operand (..))
 import Data.Char (isDigit)
 import Data.Foldable (Foldable (toList))
 import qualified Data.Map as Map
@@ -15,13 +16,13 @@ genAsm :: [(BBFunc PhyRegister a, Int)] -> Asm
 genAsm = unlines . (preamble :) . toList . map (uncurry genFunc)
   where
     genFunc :: BBFunc PhyRegister a -> Int -> String
-    genFunc (BBFunc name _ blocks) maxStack = unlines . (funcPreamble ++) . map (uncurry genBasicBlock) . Map.toList . Map.map (fmapSameExtra fst) $ blocks
+    genFunc (BBFunc name _ blocks) maxStack = unlines . (funcPreamble ++) . map (genBasicBlock blocks) $ orderGraph blocks name
       where
         funcPreamble =
           ["func_" ++ name ++ ":", "push %rbp", "mov %rsp, %rbp", "sub $" ++ show (maxStack * 4) ++ ", %rsp"]
             ++ ["push " ++ (show . var64) r | r <- usedRegs]
-    genBasicBlock :: String -> BasicBlock (IStmt PhyRegister) a -> String
-    genBasicBlock name b = "bb_" ++ name ++ ":\n" ++ (unlines . map genIStmt) (Compile.IR.lines b)
+    genBasicBlock :: Map.Map Label (BasicBlock (IStmt PhyRegister, s) d) -> Label -> String
+    genBasicBlock blocks name = "bb_" ++ name ++ ":\n" ++ (unlines . map (genIStmt . fst) . Compile.IR.lines $ blocks Map.! name)
     genIStmt :: IStmt PhyRegister -> String
     -- genIStmt (Label l) = unlines [l ++ ":"]
     genIStmt (Goto l) = unlines ["jmp bb_" ++ l]
