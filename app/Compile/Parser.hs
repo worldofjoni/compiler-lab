@@ -261,10 +261,10 @@ expr' = do
     intExpr
       <|> boolExpr
       <|> parens expr
-      <|> try varExpr
       <|> try (uncurry AllocArray <$ reserved "alloc_array" <*> tuple parseType expr)
       <|> try (Alloc <$ reserved "alloc" <*> parens parseType)
-      <|> try (uncurry3 Call <$> parseCall)
+      <|> try (uncurry3 Call <$> parseCall) -- need to come after special funcitons
+      <|> try varExpr -- need to come after functions!
   exts <-
     many $
       (flip FieldE <$ symbol "." <*> identifier)
