@@ -75,7 +75,7 @@ checkStructDefs defs [] = pure defs
 checkStructDefs defs (Function _ : as) = checkStructDefs defs as
 checkStructDefs defs (Struct (StructDef name fields) : as) = do
   when (Map.member name defs) $ semanticFail $ "Struct " ++ name ++ " already defined."
-  when (length fields /= Set.size (Set.fromList fields)) $ semanticFail $ "Struct " ++ name ++ " contains duplicate fields."
+  when (length fields /= Set.size (Set.fromList . map snd $ fields)) $ semanticFail $ "Struct " ++ name ++ " contains duplicate fields."
   let defs' = Map.insert name (Map.fromList $ map swap fields) defs
   checkStructDefs defs' as
 

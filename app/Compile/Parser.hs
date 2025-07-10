@@ -231,7 +231,7 @@ nullExpr = do
 
 opTable :: [[Operator Parser Expr]]
 opTable =
-  [ [Prefix (DerefE <$ symbol "*")],
+  [ [Prefix (foldr1 (.) <$> some (DerefE <$ symbol "*"))],
     [manyUnaryOp [(Neg, "-"), (Not, "!"), (BitNot, "~")]],
     [infix_ Mul "*", infix_ Div "/", infix_ Mod "%"],
     [infix_ Add "+", infix_ Sub "-"],
@@ -260,6 +260,7 @@ expr' = do
   e <-
     intExpr
       <|> boolExpr
+      <|> nullExpr
       <|> parens expr
       <|> try (uncurry AllocArray <$ reserved "alloc_array" <*> tuple parseType expr)
       <|> try (Alloc <$ reserved "alloc" <*> parens parseType)
