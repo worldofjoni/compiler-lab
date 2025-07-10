@@ -28,12 +28,20 @@ orderGraphInternal label = do
     else do
       visit label
       block <- gets (fromJust . Map.lookup label . blocks)
-      followers <- traverse orderGraphInternal (naturalSuccessorOrder block)
+      followers <- mapM orderGraphInternal (naturalSuccessorOrder block)
       pure $ label : concat followers
 
 naturalSuccessorOrder :: BasicBlock (IStmt t, s) d -> [Label]
-naturalSuccessorOrder block = if length (successors block) <= 2 then catMaybes [natural, alt] else error "no basic block should have more than 2 successors"
+naturalSuccessorOrder block =
+  assert "no basic block should have >2 successors" (length (successors block) <= 2) $
+    assert "natural order should contain all successors" (length order == length (successors block)) $
+      order
   where
     alt = case fmap fst . saveHead . reverse . Compile.IR.lines $ block of Just (GotoIfNot l _) -> Just l; _ -> Nothing
     natural = saveHead . filter (\s -> Just s /= alt) $ successors block
+    order = catMaybes [natural, alt]
     saveHead xs = if null xs then Nothing else Just $ head xs
+
+assert :: String -> Bool -> a -> a
+assert _ True = id
+assert msg False = error msg

@@ -123,6 +123,7 @@ genStmt (If condition thenStmt (Just elseStmt) _) = do
   emit $ Goto endLabel
   commitAndNew [endLabel] elseLabel
   genStmt elseStmt
+  emit $ Goto endLabel
   commitAndNew [endLabel] endLabel
 genStmt (If condition thenStmt Nothing _) = do
   o <- toOperand condition
