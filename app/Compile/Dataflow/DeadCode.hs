@@ -27,7 +27,7 @@ shiftLivenessUp f = f {funcBlocks = shiftBlock <$> funcBlocks f}
     outputOf s = snd . head . Compile.IR.lines . fromJust . Map.lookup s $ funcBlocks f
     shift inital ((s1, _) : ss@((_, l2) : _)) = (s1, l2) : shift inital ss
     shift inital [(s, _)] = [(s, inital)]
-    shift inital [] = []
+    shift _ [] = []
 
 hasSideEffects :: Op -> Bool
-hasSideEffects = (`elem` [Mul, Div, Mod])
+hasSideEffects = (`elem` [Div, Mod])
