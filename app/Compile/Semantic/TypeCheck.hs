@@ -15,7 +15,6 @@ import qualified Data.Set as Set
 import Data.Tuple (swap)
 import Error (L1ExceptT, semanticFail)
 import Text.Megaparsec (SourcePos, sourcePosPretty)
-import Debug.Trace (traceShow, traceShowM)
 
 data VariableStatus
   = Declared
@@ -78,6 +77,8 @@ checkStructDefs defs (Struct (StructDef name fields) : as) = do
   when (length fields /= Set.size (Set.fromList . map snd $ fields)) $ semanticFail $ "Struct " ++ name ++ " contains duplicate fields."
   let defs' = Map.insert name (Map.fromList $ map swap fields) defs
   checkStructDefs defs' as
+
+-- todo recursive structs
 
 varStatusAnalysis :: AST -> L1ExceptT ()
 varStatusAnalysis ast = do
@@ -187,14 +188,6 @@ lookupStruct name field = do
   record' <- maybe (semanticFail' $ "Struct " ++ name ++ " does not exist.") pure record
   maybe (semanticFail' $ "Field " ++ field ++ " does not exists for struct " ++ name) pure (Map.lookup field record')
 
--- undeclaredFail :: String -> SourcePos -> L1TypeCheck a
--- undeclaredFail name pos =
---   semanticFail' $
---     "Variable "
---       ++ name
---       ++ " undeclared at: "
---       ++ posPretty pos
-
 exprType :: Expr -> L1TypeCheck Type
 exprType (IntExpr str pos) = do
   -- Check that literals are in bounds
@@ -261,117 +254,6 @@ assertType ty check = do
   unless (ty == check) . semanticFail' $ "Expected type " ++ show ty ++ " got " ++ show check
   pure check
 
--- checkExpr :: Type -> Expr -> L1TypeCheck ()
--- checkExpr IntType (IntExpr str pos) = do
---   -- Check that literals are in bounds
---   let res = parseNumber str
---   case res of
---     Left e -> do
---       semanticFail' $ "Error in " ++ posPretty pos ++ e
---     Right _ -> return ()
--- checkExpr ty (IntExpr _ pos) = semanticFail' $ "Expected " ++ show ty ++ " but got integer at: " ++ posPretty pos
--- -- checkExpr ty (LValueExpr lv pos) = do
--- -- ty2 <- lvalueType lv pos
--- -- if ty2 == ty
--- --   then return ()
--- --   else
--- --     semanticFail' $ "Expected " ++ show ty ++ " got " ++ show ty2 ++ " at: " ++ posPretty pos
--- checkExpr IntType (UnExpr Neg e) = checkExpr IntType e
--- checkExpr IntType (UnExpr BitNot e) = checkExpr IntType e
--- checkExpr BoolType (UnExpr Not e) = checkExpr BoolType e
--- checkExpr ty (UnExpr op _) = semanticFail' $ show op ++ " does not produce an " ++ show ty
--- checkExpr BoolType (BinExpr lhs op rhs) = do
---   ns <- get
---   lift $
---     catchE
---       (int ns)
---       ( \e1 ->
---           catchE
---             (bool ns)
---             ( \e2 ->
---                 catchE
---                   (ptr ns)
---                   ( \e3 ->
---                       if op `elem` boolToBoolOp ++ intToBoolOp ++ ptrToBoolOp
---                         then semanticFail $ "Operator " ++ show op ++ " requieres two bools, ints, or compatible pointers:\n" ++ show e1 ++ "\n" ++ show e2 ++ "\n" ++ show e3
---                         else failOp
---                   )
---             )
---       )
---   where
---     int =
---       evalStateT $ do
---         unless (op `elem` intToBoolOp) $ semanticFail' ""
---         checkExpr IntType lhs
---         checkExpr IntType rhs
---     bool =
---       evalStateT $ do
---         unless (op `elem` boolToBoolOp) $ semanticFail' ""
---         checkExpr BoolType lhs >> checkExpr BoolType rhs
---     ptr = evalStateT $ do
---       unless (op `elem` ptrToBoolOp) $ semanticFail' ""
---       comp <- isCompatiplePointerExpr lhs rhs
---       unless comp $ semanticFail' ""
---     failOp =
---       semanticFail $
---         "Operator " ++ show op ++ " does not produce an bool."
--- checkExpr IntType (BinExpr lhs op rhs)
---   | op `elem` intToIntOp = checkExpr IntType lhs >> checkExpr IntType rhs
---   | otherwise = semanticFail' $ "Operator " ++ show op ++ " does not produce an integer."
--- checkExpr BoolType (BoolExpr _ _) = pure ()
--- checkExpr ty (BoolExpr _ _) = semanticFail' $ "expected " ++ show ty ++ " got bool"
--- checkExpr ty (Ternary a b c) = do
---   checkExpr BoolType a
---   checkExpr ty b
---   checkExpr ty c
--- checkExpr ty (Call name args pos) = checkCall (Just ty) name args pos
--- checkExpr (PointerType _) (Null _) = pure ()
--- checkExpr t (Null _) = semanticFail' $ "expected pointer type, got " ++ show t
--- checkExpr (PointerType t) (Alloc u)
---   | t == u = pure ()
---   | otherwise = semanticFail' $ "pointer to " ++ show t ++ " cannot store " ++ show u
--- checkExpr (ArrayType t) (AllocArray u e)
---   | t == u = checkExpr IntType e
---   | otherwise = semanticFail' $ "array of " ++ show t ++ " cannot store " ++ show u
--- checkExpr (StructType _) _ = error "there are no expressions of struct type, fix your compiler!"
--- checkExpr t (Alloc _) = semanticFail' $ "Cannot allocate into " ++ show t
--- checkExpr t (AllocArray _ _) = semanticFail' $ "Cannot allocate array into " ++ show t ++ ": not an array"
--- checkExpr (PointerType _) _ = semanticFail' "no pointer arithmetric"
--- checkExpr (ArrayType _) _ = semanticFail' "no array arithmetric"
-
--- isCompatiplePointerExpr :: Expr -> Expr -> L1TypeCheck Bool
--- isCompatiplePointerExpr (Null _) (Null _) = pure True
--- isCompatiplePointerExpr e n@(Null _) = isCompatiplePointerExpr n e
--- isCompatiplePointerExpr (Null _) e = isJust <$> isPointerTo e
--- isCompatiplePointerExpr e1 e2 = do
---   p1 <- isPointerTo e1
---   p2 <- isPointerTo e2
---   case p1 of
---     Nothing -> pure False
---     Just _ -> pure (p1 == p2)
-
--- -- may panic for some expressions
--- isPointerTo :: Expr -> L1TypeCheck (Maybe Type)
--- -- isPointerTo (LValueExpr lv pos) = do
--- --   ty <- lvalueType lv pos
--- --   pure (isPointerTo' ty)
--- -- todo former lvalue
--- isPointerTo (Ternary _ a _b) = isPointerTo a
--- isPointerTo (Call name _ _) = do
---   ty <- getFunctionReturnType name
---   pure $ isPointerTo' ty
--- isPointerTo (Alloc ty) = pure (Just ty)
--- isPointerTo (Null _) = error "cannt call on that!"
--- isPointerTo _ = pure Nothing
-
--- isPointerTo' :: Type -> Maybe Type
--- isPointerTo' (PointerType t) = Just t
--- isPointerTo' _ = Nothing
-
--- getFunctionReturnType :: String -> L1TypeCheck Type
--- getFunctionReturnType name = do
---   gets (fst . fromJust . Map.lookup name . signature)
-
 intToBoolOp :: [Op]
 intToBoolOp = [Lt, Le, Gt, Ge, Eq, Neq]
 
@@ -380,12 +262,6 @@ boolToBoolOp = [And, Or, Eq, Neq]
 
 ptrToBoolOp :: [Op]
 ptrToBoolOp = [Eq, Neq]
-
--- toBoolOp :: [Op]
--- toBoolOp = intToBoolOp ++ boolToBoolOp ++ ptrToBoolOp
-
--- toIntOp :: [Op]
--- toIntOp = intToIntOp
 
 intToIntOp :: [Op]
 intToIntOp = [Add, Sub, Mul, Div, Mod, Shl, Shr, BitOr, BitAnd, BitXor]
