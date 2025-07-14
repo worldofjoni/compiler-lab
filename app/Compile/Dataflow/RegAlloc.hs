@@ -44,7 +44,7 @@ mvArgs :: BBFunc PhyRegister () -> BBFunc PhyRegister ()
 mvArgs func = func {funcBlocks = Map.adjust prependMvs (funcName func) (funcBlocks func)}
   where
     prependMvs b = b {Compile.IR.lines = zipWith mv (funcArgs func) argumentRegs ++ Compile.IR.lines b}
-    mv r a = (r :<- Reg a, ())
+    mv a r = (r :<- Reg a, ())
 
 unsafeLookup :: (Ord k) => k -> Map.Map k a -> a
 unsafeLookup k m = fromJust $ Map.lookup k m
