@@ -24,7 +24,11 @@ shiftLivenessUp :: (Ord t) => LivenessFunc t -> LivenessFunc t
 shiftLivenessUp f = f {funcBlocks = shiftBlock <$> funcBlocks f}
   where
     shiftBlock b = b {Compile.IR.lines = shift (Set.unions [outputOf s | s <- successors b]) $ Compile.IR.lines b}
-    outputOf s = snd . head . Compile.IR.lines . fromJust . Map.lookup s $ funcBlocks f
+    outputOf s =
+      let s_block = fromJust . Map.lookup s $ funcBlocks f
+       in case Compile.IR.lines s_block of
+            ((_, live) : _) -> live
+            [] -> Set.unions . map outputOf $ successors s_block
     shift inital ((s1, _) : ss@((_, l2) : _)) = (s1, l2) : shift inital ss
     shift inital [(s, _)] = [(s, inital)]
     shift _ [] = []
