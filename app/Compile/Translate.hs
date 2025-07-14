@@ -13,6 +13,8 @@ import Compile.IR
 import Control.Monad.State
 import Data.Foldable (traverse_)
 import qualified Data.Map as Map
+import GHC.Real (reduce)
+import Text.Megaparsec (ErrorItem (Label))
 
 type Translate a = State TranslateState a
 
@@ -77,13 +79,14 @@ popLoopContinue () = modify $ \s -> s {loopContinues = tail $ loopContinues s}
 
 genFunct :: Function -> BBFunc NameOrReg ()
 genFunct (Func _ name args block _) =
-  BBFunc
-    { funcName = name,
-      funcArgs = map (Left . snd) args :: [NameOrReg],
-      funcBlocks =
-        fmap (fmapSameExtra (\s -> (s, ()))) . code $ state,
-      blockOrder = labelOrder state
-    }
+  reduceEmptyBlocks $
+    BBFunc
+      { funcName = name,
+        funcArgs = map (Left . snd) args :: [NameOrReg],
+        funcBlocks =
+          fmap (fmapSameExtra (\s -> (s, ()))) . code $ state,
+        blockOrder = labelOrder state
+      }
   where
     state =
       execState
@@ -103,7 +106,26 @@ genFunct (Func _ name args block _) =
             labelOrder = []
           }
 
--- todo
+reduceEmptyBlocks :: BBFunc a b -> BBFunc a b
+reduceEmptyBlocks a@(BBFunc _ _ bs order) = a {funcBlocks = newBlocks, blockOrder = order'}
+  where
+    newBlocks = foldl reduce bs order
+    order' = filter (`Map.member` newBlocks) order
+    reduce :: Map.Map Label (BasicBlock (IStmt a, b) ()) -> Label -> Map.Map Label (BasicBlock (IStmt a, b) ())
+    reduce bs label
+      | null . Compile.IR.lines $ toDelete = Map.mapWithKey (\k v -> v {Compile.IR.lines = map (mapSnd updateJump) $ Compile.IR.lines v, successors = map replace $ successors v}) . Map.delete label $ bs -- remove block
+      | otherwise = bs
+      where
+        toDelete = bs Map.! label
+        replace :: Label -> Label
+        replace l
+          | l == label = head . successors $ toDelete
+          | otherwise = l
+        updateJump :: IStmt a -> IStmt a
+        updateJump (Goto l) = Goto (replace l)
+        updateJump (GotoIfNot l e) = GotoIfNot (replace l) e
+        updateJump x = x
+        mapSnd f (a, b) = (f a, b)
 
 genBlock :: [Stmt] -> Translate ()
 genBlock = mapM_ genStmt
