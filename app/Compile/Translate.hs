@@ -1,4 +1,7 @@
 {-# LANGUAGE TupleSections #-}
+{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
+
+{-# HLINT ignore "Use tuple-section" #-}
 
 module Compile.Translate
   ( translate,
@@ -18,6 +21,7 @@ data TranslateState = TranslateState
     nextLabelNo :: Integer,
     loopEnds :: [Label],
     loopContinues :: [Label],
+    labelOrder :: [Label],
     code :: Map.Map Label IRBasicBlock,
     currentLines :: [IStmt NameOrReg],
     currentLabel :: Label,
@@ -51,7 +55,7 @@ emit :: IStmt NameOrReg -> Translate ()
 emit instr = modify $ \s -> s {currentLines = currentLines s ++ [instr]}
 
 commitAndNew :: [Label] -> Label -> Translate ()
-commitAndNew succs newLabel = modify $ \s -> s {currentLines = [], currentLabel = newLabel, code = Map.insert (currentLabel s) (newBlock s) (code s)}
+commitAndNew succs newLabel = modify $ \s -> s {labelOrder = labelOrder s ++ [currentLabel s], currentLines = [], currentLabel = newLabel, code = Map.insert (currentLabel s) (newBlock s) (code s)}
   where
     newBlock s = BasicBlock {Compile.IR.lines = currentLines s, successors = succs, extra = ()}
 
@@ -75,24 +79,27 @@ genFunct (Func _ name args block _) =
     { funcName = name,
       funcArgs = map (Left . snd) args :: [NameOrReg],
       funcBlocks =
-        fmap (fmapSameExtra (\s -> (s, ()))) $
-          code $
-            execState
-              ( do
-                  genBlock block
-                  commitAndNew [] ""
-              )
-              TranslateState
-                { nextReg = 0,
-                  nextLabelNo = 0,
-                  loopEnds = [],
-                  loopContinues = [],
-                  code = Map.empty,
-                  currentLines = [],
-                  currentLabel = name,
-                  currentFunc = name
-                }
+        fmap (fmapSameExtra (\s -> (s, ()))) . code $ state,
+      blockOrder = labelOrder state
     }
+  where
+    state =
+      execState
+        ( do
+            genBlock block
+            commitAndNew [] ""
+        )
+        TranslateState
+          { nextReg = 0,
+            nextLabelNo = 0,
+            loopEnds = [],
+            loopContinues = [],
+            code = Map.empty,
+            currentLines = [],
+            currentLabel = name,
+            currentFunc = name,
+            labelOrder = []
+          }
 
 -- todo
 

@@ -2,7 +2,6 @@
 
 module Compile.Dataflow.Liveness (LiveVars, LivenessBlock, LivenessFunc, addLiveness) where
 
-import Compile.Dataflow.DFS (orderGraph)
 import Compile.IR
 import Control.Monad
 import Control.Monad.State
@@ -30,7 +29,7 @@ addLiveness f =
     { funcBlocks = blocks $ execState (updateAllUntilConvergence order) initialState
     }
   where
-    order = orderGraph (funcBlocks f) (funcName f)
+    order = blockOrder f
     addEmptyLiveVars b = b {Compile.IR.lines = map (\(x, ()) -> (x, Set.empty)) $ Compile.IR.lines b}
     initialState = LivenessState {blocks = fmap addEmptyLiveVars (funcBlocks f), cashedInputs = Map.empty}
 

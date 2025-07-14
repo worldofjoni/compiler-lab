@@ -38,7 +38,7 @@ instance (Show l, Show e) => Show (BasicBlock l e) where
 
 type NameOrReg = Either VarName VRegister
 
-data BBFunc r sup = BBFunc {funcName :: String, funcArgs :: [r], funcBlocks :: Map.Map Label (BasicBlock (IStmt r, sup) ())}
+data BBFunc r sup = BBFunc {funcName :: String, funcArgs :: [r], funcBlocks :: Map.Map Label (BasicBlock (IStmt r, sup) ()), blockOrder :: [Label]}
 
 type IRFunc = BBFunc NameOrReg ()
 

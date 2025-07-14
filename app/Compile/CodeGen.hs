@@ -3,7 +3,6 @@
 module Compile.CodeGen (genAsm) where
 
 import Compile.AST (Op (..), UnOp (..))
-import Compile.Dataflow.DFS (orderGraph)
 import Compile.Dataflow.RegAlloc (PhyRegister (..), usedRegs)
 import Compile.IR (BBFunc (BBFunc), BasicBlock (lines), IStmt (..), Label, Operand (..))
 import Data.Char (isDigit)
@@ -16,7 +15,7 @@ genAsm :: [(BBFunc PhyRegister a, Int)] -> Asm
 genAsm = unlines . (preamble :) . toList . map (uncurry genFunc)
   where
     genFunc :: BBFunc PhyRegister a -> Int -> String
-    genFunc (BBFunc name _ blocks) maxStack = unlines . (funcPreamble ++) . map (genBasicBlock blocks) $ orderGraph blocks name
+    genFunc (BBFunc name _ blocks order) maxStack = unlines . (funcPreamble ++) . map (genBasicBlock blocks) $ order
       where
         funcPreamble =
           ["func_" ++ name ++ ":", "push %rbp", "mov %rsp, %rbp", "sub $" ++ show (maxStack * 4) ++ ", %rsp"]
