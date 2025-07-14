@@ -13,6 +13,7 @@ import Compile.IR
 import Control.Monad.State
 import Data.Foldable (traverse_)
 import qualified Data.Map as Map
+import Data.Maybe (listToMaybe, mapMaybe)
 import GHC.Real (reduce)
 import Text.Megaparsec (ErrorItem (Label))
 
@@ -113,17 +114,17 @@ reduceEmptyBlocks a@(BBFunc _ _ bs order) = a {funcBlocks = newBlocks, blockOrde
     order' = filter (`Map.member` newBlocks) order
     reduce :: Map.Map Label (BasicBlock (IStmt a, b) ()) -> Label -> Map.Map Label (BasicBlock (IStmt a, b) ())
     reduce bs label
-      | null . Compile.IR.lines $ toDelete = Map.mapWithKey (\k v -> v {Compile.IR.lines = map (mapSnd updateJump) $ Compile.IR.lines v, successors = map replace $ successors v}) . Map.delete label $ bs -- remove block
+      | null . Compile.IR.lines $ toDelete = Map.mapWithKey (\k v -> v {Compile.IR.lines = map (mapSnd updateJump) $ Compile.IR.lines v, successors = mapMaybe replace $ successors v}) . Map.delete label $ bs -- remove block
       | otherwise = bs
       where
         toDelete = bs Map.! label
-        replace :: Label -> Label
+        replace :: Label -> Maybe Label
         replace l
-          | l == label = head . successors $ toDelete
-          | otherwise = l
+          | l == label = listToMaybe . successors $ toDelete
+          | otherwise = Just l
         updateJump :: IStmt a -> IStmt a
-        updateJump (Goto l) = Goto (replace l)
-        updateJump (GotoIfNot l e) = GotoIfNot (replace l) e
+        updateJump (Goto l) = maybe Nop Goto (replace l)
+        updateJump (GotoIfNot l e) = maybe Nop (`GotoIfNot` e) (replace l)
         updateJump x = x
         mapSnd f (a, b) = (f a, b)
 
