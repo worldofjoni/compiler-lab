@@ -55,9 +55,11 @@ emit :: IStmt NameOrReg -> Translate ()
 emit instr = modify $ \s -> s {currentLines = currentLines s ++ [instr]}
 
 commitAndNew :: [Label] -> Label -> Translate ()
-commitAndNew succs newLabel = modify $ \s -> s {labelOrder = labelOrder s ++ [currentLabel s], currentLines = [], currentLabel = newLabel, code = Map.insert (currentLabel s) (newBlock s) (code s)}
+commitAndNew succs newLabel = modify $ \s -> s {labelOrder = labelOrder s ++ ifNotNull (currentLabel s), currentLines = [], currentLabel = newLabel, code = Map.insert (currentLabel s) (newBlock s) (code s)}
   where
     newBlock s = BasicBlock {Compile.IR.lines = currentLines s, successors = succs, extra = ()}
+    ifNotNull "" = []
+    ifNotNull l = [l]
 
 pushLoopEnd :: Label -> Translate ()
 pushLoopEnd l = modify $ \s -> s {loopEnds = l : loopEnds s}
