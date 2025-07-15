@@ -10,9 +10,10 @@ import Control.Monad.State
 import Data.Foldable (traverse_)
 import Data.List (sort)
 import qualified Data.Map as Map
-import Data.Maybe (fromJust, fromMaybe)
+import Data.Maybe (fromJust, fromMaybe, mapMaybe)
 import qualified Data.Set as Set
 import Data.Tuple (swap)
+import Debug.Trace (traceShowId)
 import Error (L1ExceptT, semanticFail)
 import Text.Megaparsec (SourcePos, sourcePosPretty)
 
@@ -78,11 +79,21 @@ checkStructDefs defs (Struct (StructDef name fields) : as) = do
   let defs' = Map.insert name (Map.fromList $ map swap fields) defs
   checkStructDefs defs' as
 
--- todo recursive structs
+recursiveStructNotContains :: StructDefs -> String -> L1ExceptT ()
+recursiveStructNotContains defs struct = mapM_ recSNC (getStructMembers struct)
+  where
+    recSNC :: String -> L1ExceptT ()
+    recSNC test = do
+      when (struct == test) . semanticFail $ "Recursive struct deteted: " ++ struct
+      when (test > struct) $ mapM_ recSNC (getStructMembers test) -- avoid loops
+    isStruct (StructType name) = Just name
+    isStruct _ = Nothing
+    getStructMembers = mapMaybe isStruct . Map.elems . (defs Map.!)
 
 varStatusAnalysis :: AST -> L1ExceptT ()
 varStatusAnalysis ast = do
   structDefs <- checkStructDefs Map.empty ast
+  mapM_ (recursiveStructNotContains structDefs) (Map.keys structDefs)
   signatures <- functionSignatures fs
   mapM_ (checkFunction signatures structDefs) fs
   where
