@@ -139,11 +139,11 @@ genStmt (SimpStmt (Decl {})) = do
   pure ()
 genStmt (SimpStmt (Init _ name e _)) = do
   assignTo (Left name) e
-genStmt (SimpStmt (Asgn name Nothing e _)) = do
-  assignTo (Left undefined) e
-genStmt (SimpStmt (Asgn name (Just op) e _)) = do
+genStmt (SimpStmt (Asgn (Var name _) Nothing e _)) = do
+  assignTo (Left name) e
+genStmt (SimpStmt (Asgn (Var name _) (Just op) e _)) = do
   x <- toOperand e
-  emit $ Left undefined :<-+ (Reg (Left undefined), op, x)
+  emit $ Left name :<-+ (Reg (Left name), op, x)
 genStmt (Ret e _) = do
   x <- toOperand e
   emit $ Return x
