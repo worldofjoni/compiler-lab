@@ -78,6 +78,12 @@ instance (Show a) => Show (IStmt a) where
   show (GotoIfNot l op) = "goto " ++ show l ++ " if not " ++ show op
   show (CallIr tgt l regs) = maybe "" ((++ " <- ") . show . Reg) tgt ++ "call " ++ l ++ "(" ++ (intercalate ", " . map (show . Reg)) regs ++ ")"
   show (Phi tgt ls) = show tgt ++ " <- Φ(" ++ intercalate ", " (map show ls) ++ ")"
+  show (tgt :<-$ addr) = show tgt ++ " <- M(" ++ showA addr ++ ")"
+  show (addr :$<- src) = "M(" ++ showA addr ++ ") <- " ++ show src
+  show (AssertBounds a b) = show "assert 0 <= " ++ show a ++ " < " ++ show b
+
+showA :: (Show a) => Address a -> String
+showA (a, b, c, d) = show a ++ " + " ++ maybe "" (\c' -> " + " ++ show b ++ " * " ++ show c') c ++ show d
 
 instance Functor Operand where
   fmap f (Reg x) = Reg (f x)
@@ -85,7 +91,7 @@ instance Functor Operand where
 
 instance Functor IStmt where
   fmap f (Return op) = Return (fmap f op)
-  fmap f (x :<- y) = f x :<- (fmap f y)
+  fmap f (x :<- y) = f x :<- fmap f y
   fmap f (x :<-+ (a, op, b)) = f x :<-+ (fmap f a, op, fmap f b)
   fmap f (Operation (a, op, b)) = Operation (fmap f a, op, fmap f b)
   fmap f (Phi a xs) = Phi (f a) (map (fmap f) xs)
@@ -94,6 +100,12 @@ instance Functor IStmt where
   fmap f (GotoIfNot l x) = GotoIfNot l (fmap f x)
   fmap f (CallIr x l xs) = CallIr (fmap f x) l (fmap f xs)
   fmap _ Nop = Nop
+  fmap f (reg :<-$ addr) = f reg :<-$ mapA f addr
+  fmap f (addr :$<- op) = mapA f addr :$<- fmap f op
+  fmap f (AssertBounds a b) = AssertBounds (f a) (f b)
+
+mapA :: (a -> b) -> Address a -> Address b
+mapA f (a, b, c, d) = (f a, b, fmap f c, d)
 
 fmapSameExtra :: (a -> b) -> BasicBlock a e -> BasicBlock b e
 fmapSameExtra f b = b {Compile.IR.lines = map f (Compile.IR.lines b)}
