@@ -20,11 +20,14 @@ instance Show PhyRegister where
   show (Stack n) = show (-((length usedRegs + n) * 8)) ++ "(%rbp)"
   show (ArgStack n) = show ((1 +  n) * 8) ++ "(%rbp)"
 -- To make the code gen easer we leave some special registers unallocated:
+notUse :: [PhyRegister]
 notUse = map PhyReg ["rax", "rbx", "rcx", "rdx", "rbp", "rsp"]
 
 -- This leaves
+usedRegs :: [PhyRegister]
 usedRegs = map PhyReg ["edi", "esi"] ++ map (PhyReg . (\n -> 'r' : n ++ "d") . show) [8 .. 15]
 
+use :: [PhyRegister]
 use = usedRegs ++ map Stack [1 ..]
 
 -- which are ALL CALLEE SAVED.
@@ -51,6 +54,3 @@ mvArgs func = func {funcBlocks = Map.adjust prependMvs (funcName func) (funcBloc
   where
     prependMvs b = b {Compile.IR.lines = zipWith mv (funcArgs func) argumentRegs ++ Compile.IR.lines b}
     mv a r = (r :<- Reg a, ())
-
-unsafeLookup :: (Ord k) => k -> Map.Map k a -> a
-unsafeLookup k m = fromJust $ Map.lookup k m

@@ -4,7 +4,7 @@ import Compile.Dataflow.Liveness
 import Compile.IR (BBFunc (funcBlocks), lines)
 import Data.List (sort)
 import qualified Data.Map as Map
-import Data.Maybe (catMaybes, fromJust, mapMaybe)
+import Data.Maybe (fromJust, mapMaybe)
 import Data.PSQueue (Binding ((:->)))
 import qualified Data.PSQueue as PSQ
 import qualified Data.Set as Set

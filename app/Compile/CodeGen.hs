@@ -130,7 +130,7 @@ genAsm = unlines . (preamble :) . toList . map (uncurry genFunc)
     genIStmt (CallIr mret name regs) =
       unlines $
         [ case x of
-            (PhyReg _) -> mov (show a) (show x)
+            (PhyReg _) -> mov (showOperand a) (show x)
             (ArgStack _) -> case a of Imm i -> "push " ++ decConst i; Reg a' -> "push " ++ (show . var64) a'
             _ -> "error unsuitable argument place"
           | (a, x) <- reverse $ zip regs argumentRegs
@@ -164,7 +164,7 @@ genAsm = unlines . (preamble :) . toList . map (uncurry genFunc)
       unlines
         [ mov (asmAddr a) (show reg)
         ]
-    genIStmt (a :$<- op) = unlines [mov (show op) (asmAddr a)]
+    genIStmt (a :$<- op) = unlines [mov (showOperand op) (asmAddr a)]
     genIStmt (AssertBounds var bound) =
       unlines
         [ "cmp " ++ show var ++ ", $0" ++ show bound,
