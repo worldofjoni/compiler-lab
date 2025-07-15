@@ -36,9 +36,22 @@ type Parser = Parsec Void String
 astParser :: Parser AST
 astParser = do
   sc
-  functions <- many parseFunction
+  defs <- many parseDefinition
   eof
-  return functions
+  return defs
+
+parseDefinition :: Parser Definition
+parseDefinition =
+  (Struct <$> try parseStructDef)
+    <|> (Function <$> parseFunction)
+
+parseStructDef :: Parser StructDef
+parseStructDef = do
+  reserved "struct"
+  name <- identifier
+  members <- braces $ many $ (,) <$> parseType <*> identifier <* semi
+  semi
+  pure $ StructDef name members
 
 parseFunction :: Parser Function
 parseFunction = do
@@ -55,8 +68,19 @@ parseCall = (,,) <$> funcIdentifier <*> nTuple expr <*> getSourcePos
 nTuple :: Parser a -> Parser [a]
 nTuple p = parens $ ((:) <$> p <*> many (symbol "," >> p)) <|> pure []
 
+parseType' :: Parser Type
+parseType' =
+  (IntType <$ reserved "int")
+    <|> (BoolType <$ reserved "bool")
+    <|> (StructType <$ reserved "struct" <*> identifier)
+
 parseType :: Parser Type
-parseType = IntType <$ reserved "int" <|> BoolType <$ reserved "bool" <?> "type"
+parseType =
+  do
+    t <- parseType'
+    supps <- many (ArrayType <$ symbol "[]" <|> PointerType <$ symbol "*")
+    pure $ foldl (flip ($)) t supps
+    <?> "type"
 
 stmt :: Parser Stmt
 stmt =
@@ -122,6 +146,21 @@ parseBreak = do
 simp :: Parser Simp
 simp = try decl <|> try asign <|> (uncurry3 SimpCall <$> parseCall)
 
+lvalue :: Parser LValue
+lvalue =
+  do
+    lv <-
+      try (flip Var <$> getSourcePos <*> identifier)
+        <|> parens lvalue
+        <|> (Deref <$ symbol "*" <*> lvalue)
+    exts <-
+      many $
+        (flip Field <$ symbol "." <*> identifier)
+          <|> ((\i l -> Field (Deref l) i) <$ symbol "->" <*> identifier)
+          <|> (flip ArrayAccess <$> brackets expr)
+    pure $ foldl (flip ($)) lv exts
+    <?> "lvalue"
+
 decl :: Parser Simp
 decl = do
   pos <- getSourcePos
@@ -169,8 +208,8 @@ ret = do
   semi
   return $ Ret e pos
 
-expr' :: Parser Expr
-expr' = parens expr <|> try (uncurry3 Call <$> parseCall) <|> identExpr <|> intExpr <|> boolExpr
+tuple :: Parser a -> Parser b -> Parser (a, b)
+tuple a b = parens ((,) <$> a <* symbol "," <*> b)
 
 intExpr :: Parser Expr
 intExpr = do
@@ -184,15 +223,16 @@ boolExpr = do
   value <- True <$ reserved "true" <|> False <$ reserved "false"
   return $ BoolExpr value pos
 
-identExpr :: Parser Expr
-identExpr = do
+nullExpr :: Parser Expr
+nullExpr = do
   pos <- getSourcePos
-  name <- identifier
-  return $ IdentExpr name pos
+  reserved "NULL"
+  return $ Null pos
 
 opTable :: [[Operator Parser Expr]]
 opTable =
-  [ [manyUnaryOp [(Neg, "-"), (Not, "!"), (BitNot, "~")]],
+  [ [Prefix (foldr1 (.) <$> some (DerefE <$ symbol "*"))],
+    [manyUnaryOp [(Neg, "-"), (Not, "!"), (BitNot, "~")]],
     [infix_ Mul "*", infix_ Div "/", infix_ Mod "%"],
     [infix_ Add "+", infix_ Sub "-"],
     [infix_ Shl "<<", infix_ Shr ">>"],
@@ -215,6 +255,27 @@ opTable =
 expr :: Parser Expr
 expr = makeExprParser expr' opTable <?> "expression"
 
+expr' :: Parser Expr
+expr' = do
+  e <-
+    intExpr
+      <|> nullExpr
+      <|> parens expr
+      <|> try (uncurry AllocArray <$ reserved "alloc_array" <*> tuple parseType expr)
+      <|> try (Alloc <$ reserved "alloc" <*> parens parseType)
+      <|> try (uncurry3 Call <$> parseCall) -- need to come after special funcitons
+      <|> try varExpr -- need to come after functions!
+      <|> boolExpr -- needs to come after variables/functions
+  exts <-
+    many $
+      (flip FieldE <$ symbol "." <*> identifier)
+        <|> ((\i l -> FieldE (DerefE l) i) <$ symbol "->" <*> identifier)
+        <|> (flip ArrayAccessE <$> brackets expr)
+  pure $ foldl (flip ($)) e exts
+
+varExpr :: Parser Expr
+varExpr = flip VarExpr <$> getSourcePos <*> identifier
+
 -- Lexer starts here, probably worth moving to its own file at some point
 sc :: Parser ()
 sc = L.space (void $ takeWhile1P Nothing (`elem` [' ', '\t', '\r', '\n'])) lineComment blockComment
@@ -233,6 +294,9 @@ parens = between (symbol "(") (symbol ")")
 
 braces :: Parser a -> Parser a
 braces = between (symbol "{") (symbol "}")
+
+brackets :: Parser a -> Parser a
+brackets = between (symbol "[") (symbol "]")
 
 semi :: Parser ()
 semi = void $ symbol ";"
@@ -346,6 +410,3 @@ identifier = (lexeme . try) (p >>= check)
       if x `elem` reservedWords
         then fail (x ++ " is reserved")
         else return x
-
-lvalue :: Parser String
-lvalue = try identifier <|> parens lvalue <?> "lvalue"

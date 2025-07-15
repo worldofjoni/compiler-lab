@@ -7,6 +7,7 @@ import Compile.Dataflow.DFS ()
 import Compile.Dataflow.RegAlloc (PhyRegister (..), argumentRegs, usedRegs)
 import Compile.IR (BBFunc (BBFunc), BasicBlock (lines), IStmt (..), Label, Operand (..))
 import Data.Char (isDigit)
+
 import Data.Foldable (Foldable (toList))
 import qualified Data.Map as Map
 
@@ -207,3 +208,6 @@ functions =
       "func_read:\n  push %rax\n  mov $0, %rax\n  mov $0, %rdi\n  mov %rsp, %rsi\n  mov $1, %rdx\n  syscall\n  mov %rax, %rbx\n  pop %rax\n  and $0xFF, %rax\n  mov $-1, %edx\n  cmp $1, %rbx\n  cmovnz %edx, %eax\n  ret\n  ",
       "func_flush: \n   mov $0, %eax\n ret\n"
     ]
+
+dummyAsm :: String
+dummyAsm = preamble ++ "func_main:\nmov $0, %eax\nret"

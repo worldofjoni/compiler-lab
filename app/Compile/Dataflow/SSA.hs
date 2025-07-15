@@ -8,7 +8,6 @@ import Control.Monad.State (State, evalState, execState, gets, modify, runState)
 import qualified Data.Map as Map
 import Data.Maybe (fromJust, fromMaybe)
 import qualified Data.Set as Set
-import GHC.Event.Windows (HandleData (_handleCallback))
 
 type VNameOrReg = Either (VarName, Int) VRegister -- versioned names
 
