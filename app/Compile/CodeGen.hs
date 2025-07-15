@@ -3,7 +3,8 @@
 module Compile.CodeGen (genAsm) where
 
 import Compile.AST (Op (..), UnOp (..))
-import Compile.Dataflow.RegAlloc (PhyRegister (..), usedRegs)
+import Compile.Dataflow.DFS (orderGraph)
+import Compile.Dataflow.RegAlloc (PhyRegister (..), argumentRegs, usedRegs)
 import Compile.IR (BBFunc (BBFunc), BasicBlock (lines), IStmt (..), Label, Operand (..))
 import Data.Char (isDigit)
 import Data.Foldable (Foldable (toList))
@@ -128,7 +129,7 @@ genAsm = unlines . (preamble :) . toList . map (uncurry genFunc)
     genIStmt (Return o) = unlines $ [mov (showOperand o) "%eax"] ++ ["pop " ++ (show . var64) r | r <- usedRegs] ++ ["leave", "ret"]
     genIStmt (CallIr mret name regs) =
       unlines $
-        ["push " ++ (show . var64) r | r <- reverse regs]
+        [case x of (PhyReg _) -> mov (show a) (show x); (ArgStack _) -> "push " ++ (show . var64) a; _ -> "error unsuitable argument place" | (a, x) <- reverse $ zip regs argumentRegs]
           ++ ["call func_" ++ name]
           ++ maybe [] (pure . mov "%eax" . show) mret
           ++ ["pop %rax" | _ <- regs]
@@ -173,7 +174,7 @@ instance Show PhyRegister where
   show :: PhyRegister -> String
   show (PhyReg r) = '%' : r
   show (Stack n) = show (-((length usedRegs + n) * 8)) ++ "(%rbp)"
-  show (ArgStack n) = show ((n + 1) * 8 + 16) ++ "(%rbp)"
+  show (ArgStack n) = show ((1 +  n) * 8) ++ "(%rbp)"
 
 var64 :: PhyRegister -> PhyRegister
 var64 (PhyReg x) = if isDigit $ x !! 1 then PhyReg (init $ x) else PhyReg ('r' : tail x)

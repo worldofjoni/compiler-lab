@@ -1,6 +1,6 @@
 {-# LANGUAGE TupleSections #-}
 
-module Compile.Dataflow.RegAlloc (PhyRegister (..), allocateRegisters, usedRegs) where
+module Compile.Dataflow.RegAlloc (PhyRegister (..), allocateRegisters, usedRegs, argumentRegs) where
 
 import Compile.Dataflow.Coloring (Coloring, color, interferenceGraph)
 import Compile.Dataflow.DeadCode (eliminateDeadCode)
