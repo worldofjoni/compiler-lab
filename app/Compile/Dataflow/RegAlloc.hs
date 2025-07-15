@@ -1,4 +1,5 @@
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE InstanceSigs #-}
 
 module Compile.Dataflow.RegAlloc (PhyRegister (..), allocateRegisters, usedRegs, argumentRegs) where
 
@@ -13,6 +14,11 @@ import Data.Maybe (fromJust, mapMaybe)
 data PhyRegister = PhyReg String | Stack Int | ArgStack Int
   deriving (Eq)
 
+instance Show PhyRegister where
+  show :: PhyRegister -> String
+  show (PhyReg r) = '%' : r
+  show (Stack n) = show (-((length usedRegs + n) * 8)) ++ "(%rbp)"
+  show (ArgStack n) = show ((1 +  n) * 8) ++ "(%rbp)"
 -- To make the code gen easer we leave some special registers unallocated:
 notUse = map PhyReg ["rax", "rbx", "rcx", "rdx", "rbp", "rsp"]
 

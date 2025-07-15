@@ -13,7 +13,6 @@ import qualified Data.Map as Map
 import Data.Maybe (fromJust, fromMaybe, mapMaybe)
 import qualified Data.Set as Set
 import Data.Tuple (swap)
-import Debug.Trace (traceShowId)
 import Error (L1ExceptT, semanticFail)
 import Text.Megaparsec (SourcePos, sourcePosPretty)
 

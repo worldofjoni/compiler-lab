@@ -14,8 +14,6 @@ import Control.Monad.State
 import Data.Foldable (traverse_)
 import qualified Data.Map as Map
 import Data.Maybe (listToMaybe, mapMaybe)
-import GHC.Real (reduce)
-import Text.Megaparsec (ErrorItem (Label))
 
 type Translate a = State TranslateState a
 
@@ -87,11 +85,11 @@ genFunct (Function (Func _ name args block _)) =
       { funcName = name,
         funcArgs = map (Left . snd) args :: [NameOrReg],
         funcBlocks =
-          fmap (fmapSameExtra (\s -> (s, ()))) . code $ state,
-        blockOrder = labelOrder state
+          fmap (fmapSameExtra (\s -> (s, ()))) . code $ endState,
+        blockOrder = labelOrder endState
       }
   where
-    state =
+    endState =
       execState
         ( do
             genBlock block
@@ -111,13 +109,13 @@ genFunct (Function (Func _ name args block _)) =
 genFunct (Struct _) = Nothing
 
 reduceEmptyBlocks :: BBFunc a b -> BBFunc a b
-reduceEmptyBlocks a@(BBFunc _ _ bs order) = a {funcBlocks = newBlocks, blockOrder = order'}
+reduceEmptyBlocks a@(BBFunc _ _ bs0 order) = a {funcBlocks = newBlocks, blockOrder = order'}
   where
-    newBlocks = foldl reduce bs order
+    newBlocks = foldl reduce bs0 order
     order' = filter (`Map.member` newBlocks) order
     reduce :: Map.Map Label (BasicBlock (IStmt a, b) ()) -> Label -> Map.Map Label (BasicBlock (IStmt a, b) ())
     reduce bs label
-      | null . Compile.IR.lines $ toDelete = Map.mapWithKey (\k v -> v {Compile.IR.lines = map (mapSnd updateJump) $ Compile.IR.lines v, successors = mapMaybe replace $ successors v}) . Map.delete label $ bs -- remove block
+      | null . Compile.IR.lines $ toDelete = Map.map (\v -> v {Compile.IR.lines = map (mapSnd updateJump) $ Compile.IR.lines v, successors = mapMaybe replace $ successors v}) . Map.delete label $ bs -- remove block
       | otherwise = bs
       where
         toDelete = bs Map.! label
@@ -129,7 +127,7 @@ reduceEmptyBlocks a@(BBFunc _ _ bs order) = a {funcBlocks = newBlocks, blockOrde
         updateJump (Goto l) = maybe Nop Goto (replace l)
         updateJump (GotoIfNot l e) = maybe Nop (`GotoIfNot` e) (replace l)
         updateJump x = x
-        mapSnd f (a, b) = (f a, b)
+        mapSnd f (b, c) = (f b, c)
 
 genBlock :: [Stmt] -> Translate ()
 genBlock = mapM_ genStmt

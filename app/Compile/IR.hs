@@ -103,4 +103,4 @@ maybeMapStmts :: ((IStmt a, sup) -> Maybe (IStmt a, sup)) -> BBFunc a sup -> BBF
 maybeMapStmts f func = func {funcBlocks = Map.map (blockMap f) (funcBlocks func)}
   where
     blockMap :: ((IStmt a, sup) -> Maybe (IStmt a, sup)) -> BasicBlock (IStmt a, sup) e -> BasicBlock (IStmt a, sup) e
-    blockMap f b = b {Compile.IR.lines = mapMaybe f (Compile.IR.lines b)}
+    blockMap f' b = b {Compile.IR.lines = mapMaybe f' (Compile.IR.lines b)}

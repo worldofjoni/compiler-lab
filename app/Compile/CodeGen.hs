@@ -171,11 +171,6 @@ genCompare setInst x a b =
       mov "%eax" (show x)
     ]
 
-instance Show PhyRegister where
-  show :: PhyRegister -> String
-  show (PhyReg r) = '%' : r
-  show (Stack n) = show (-((length usedRegs + n) * 8)) ++ "(%rbp)"
-  show (ArgStack n) = show ((1 +  n) * 8) ++ "(%rbp)"
 
 var64 :: PhyRegister -> PhyRegister
 var64 (PhyReg x) = if isDigit $ x !! 1 then PhyReg (init $ x) else PhyReg ('r' : tail x)
@@ -209,5 +204,5 @@ functions =
       "func_flush: \n   mov $0, %eax\n ret\n"
     ]
 
-dummyAsm :: String
-dummyAsm = preamble ++ "func_main:\nmov $0, %eax\nret"
+-- dummyAsm :: String
+-- dummyAsm = preamble ++ "func_main:\nmov $0, %eax\nret"
