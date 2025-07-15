@@ -3,7 +3,7 @@
 module Compile.CodeGen (genAsm) where
 
 import Compile.AST (Op (..), UnOp (..))
-import Compile.Dataflow.DFS (orderGraph)
+import Compile.Dataflow.DFS ()
 import Compile.Dataflow.RegAlloc (PhyRegister (..), argumentRegs, usedRegs)
 import Compile.IR (BBFunc (BBFunc), BasicBlock (lines), IStmt (..), Label, Operand (..))
 import Data.Char (isDigit)
