@@ -57,7 +57,7 @@ data IStmt a
   | Unary a UnOp (Operand a)
   | Goto Label
   | GotoIfNot Label (Operand a)
-  | CallIr (Maybe a) Label [a]
+  | CallIr (Maybe a) Label [Operand a]
   | a :<-$ (Address a) -- memload
   | (Address a) :$<- Operand a -- memstore
   | AssertBounds a a -- assert bounds of a0, to be between 0 (incl) and a1 (excl)
@@ -91,16 +91,16 @@ instance Functor Operand where
 
 instance Functor IStmt where
   fmap f (Return op) = Return (fmap f op)
-  fmap f (x :<- y) = f x :<- fmap f y
+  fmap f (x :<- y) = f x :<- (fmap f y)
   fmap f (x :<-+ (a, op, b)) = f x :<-+ (fmap f a, op, fmap f b)
   fmap f (Operation (a, op, b)) = Operation (fmap f a, op, fmap f b)
   fmap f (Phi a xs) = Phi (f a) (map (fmap f) xs)
   fmap f (Unary a op b) = Unary (f a) op (fmap f b)
   fmap _ (Goto l) = Goto l
   fmap f (GotoIfNot l x) = GotoIfNot l (fmap f x)
-  fmap f (CallIr x l xs) = CallIr (fmap f x) l (fmap f xs)
+  fmap f (CallIr x l xs) = CallIr (fmap f x) l (fmap (fmap f) xs)
   fmap _ Nop = Nop
-  fmap f (reg :<-$ addr) = f reg :<-$ mapA f addr
+  fmap f (reg :<-$ addr) = f reg :<-$ (mapA f addr)
   fmap f (addr :$<- op) = mapA f addr :$<- fmap f op
   fmap f (AssertBounds a b) = AssertBounds (f a) (f b)
 

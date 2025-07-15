@@ -224,18 +224,8 @@ genStmt (Continue _) = do
   commitAndNew [cont] ""
 genStmt (BlockStmt ss _) = traverse_ genStmt ss
 genStmt (SimpStmt (SimpCall name args _)) = do
-  opsRegs <-
-    evalArgs args
+  opsRegs <- mapM toOperand args
   emit $ CallIr Nothing name opsRegs
-
-evalArgs :: [Expr] -> Translate [NameOrReg]
-evalArgs =
-  mapM
-    ( \e -> do
-        reg <- freshReg
-        assignTo reg e
-        pure reg
-    )
 
 maybeGenStmt :: Maybe Stmt -> Translate ()
 maybeGenStmt Nothing = pure ()
@@ -313,21 +303,19 @@ assignTo d (Ternary condition thenExpr elseExpr) = do
   assignTo d elseExpr
   commitAndNew [endLabel] endLabel
 assignTo d (Call name args _) = do
-  regs <- evalArgs args
+  regs <- mapM toOperand args
   emit $ CallIr (Just d) name regs
 assignTo d (Null _) = emit $ d :<- Imm 0
 assignTo d (Alloc ty) = do
-  t <- freshReg
   tysize <- sizeof ty
-  emit $ t :<- Imm tysize
-  emit $ CallIr (Just d) "alloc" [t]
+  emit $ CallIr (Just d) "alloc" [Imm 1, Imm tysize]
 assignTo d (AllocArray ty e) = do
   nElem <- toOperand e
   size <- freshReg
   tysize <- sizeof ty
-  emit $ size :<-+ (Imm tysize, Mul, nElem)
-  emit $ size :<-+ (Reg size, Add, Imm 8) -- extra for array size, aligned to 8 bytes
-  emit $ CallIr (Just d) "alloc" [size]
+  emit $ size :<-+ (nElem, Mul, Imm $ tysize `div` 8)
+  emit $ size :<-+ (Reg size, Add, Imm 1) -- size accounts for 8 extra bytes for length of array
+  emit $ CallIr (Just d) "alloc" [Reg size, Imm 8]
   emit $ (d, 0, Nothing, 0) :$<- nElem
 assignTo d l = do
   -- DerefE, ArrayE, FieldE
@@ -357,8 +345,8 @@ getAddress (FieldE st fname) = do
 getAddress _ = error "var has no address, should never be called"
 
 sizeof :: Type -> Translate Integer
-sizeof IntType = pure 4
-sizeof BoolType = pure 4
+sizeof IntType = pure 8 -- easier for now
+sizeof BoolType = pure 8 -- easier for now
 sizeof (PointerType _) = pure 8
 sizeof AnyPointer = pure 8
 sizeof (ArrayType _) = pure 8

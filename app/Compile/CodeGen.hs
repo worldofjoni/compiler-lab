@@ -5,9 +5,8 @@ module Compile.CodeGen (genAsm) where
 import Compile.AST (Op (..), UnOp (..))
 import Compile.Dataflow.DFS ()
 import Compile.Dataflow.RegAlloc (PhyRegister (..), argumentRegs, usedRegs)
-import Compile.IR (BBFunc (BBFunc), BasicBlock (lines), IStmt (..), Label, Operand (..))
+import Compile.IR (Address, BBFunc (BBFunc), BasicBlock (lines), IStmt (..), Label, Operand (..))
 import Data.Char (isDigit)
-
 import Data.Foldable (Foldable (toList))
 import qualified Data.Map as Map
 
@@ -130,7 +129,12 @@ genAsm = unlines . (preamble :) . toList . map (uncurry genFunc)
     genIStmt (Return o) = unlines $ [mov (showOperand o) "%eax"] ++ ["pop " ++ (show . var64) r | r <- usedRegs] ++ ["leave", "ret"]
     genIStmt (CallIr mret name regs) =
       unlines $
-        [case x of (PhyReg _) -> mov (show a) (show x); (ArgStack _) -> "push " ++ (show . var64) a; _ -> "error unsuitable argument place" | (a, x) <- reverse $ zip regs argumentRegs]
+        [ case x of
+            (PhyReg _) -> mov (show a) (show x)
+            (ArgStack _) -> case a of Imm i -> "push " ++ decConst i; Reg a' -> "push " ++ (show . var64) a'
+            _ -> "error unsuitable argument place"
+          | (a, x) <- reverse $ zip regs argumentRegs
+        ]
           ++ ["call func_" ++ name]
           ++ maybe [] (pure . mov "%eax" . show) mret
           ++ ["pop %rax" | _ <- regs]
@@ -156,6 +160,22 @@ genAsm = unlines . (preamble :) . toList . map (uncurry genFunc)
           "idiv %ecx"
         ]
     genIStmt (Operation _) = error "side effect-free operations should have been eliminated before code gen"
+    genIStmt (reg :<-$ a) =
+      unlines
+        [ mov (asmAddr a) (show reg)
+        ]
+    genIStmt (a :$<- op) = unlines [mov (show op) (asmAddr a)]
+    genIStmt (AssertBounds var bound) =
+      unlines
+        [ "cmp " ++ show var ++ ", $0" ++ show bound,
+          "jlt _abort",
+          "cmp " ++ show var ++ ", " ++ show bound,
+          "jge _abort"
+        ]
+
+asmAddr :: Address PhyRegister -> String
+asmAddr (a, b, Just c, d) = decConst d ++ "(" ++ show a ++ ", " ++ show c ++ ", " ++ decConst b ++ ")"
+asmAddr (a, _, Nothing, d) = decConst d ++ "(" ++ show a ++ ")"
 
 -- genIStmt (FunctionLabel name) =
 -- unlines
@@ -170,7 +190,6 @@ genCompare setInst x a b =
       "movzbl %al, %eax",
       mov "%eax" (show x)
     ]
-
 
 var64 :: PhyRegister -> PhyRegister
 var64 (PhyReg x) = if isDigit $ x !! 1 then PhyReg (init $ x) else PhyReg ('r' : tail x)
@@ -201,7 +220,9 @@ functions =
   unlines
     [ "func_print:\nmov $1, %rax\n  mov $1, %rdi\n  lea 8(%rsp), %rsi\n  mov $1, %rdx\n  syscall\n  mov $0, %eax\n  ret\n",
       "func_read:\n  push %rax\n  mov $0, %rax\n  mov $0, %rdi\n  mov %rsp, %rsi\n  mov $1, %rdx\n  syscall\n  mov %rax, %rbx\n  pop %rax\n  and $0xFF, %rax\n  mov $-1, %edx\n  cmp $1, %rbx\n  cmovnz %edx, %eax\n  ret\n  ",
-      "func_flush: \n   mov $0, %eax\n ret\n"
+      "func_flush: \n   mov $0, %eax\n ret\n",
+      "_abort: call abort\n",
+      "func_alloc: \n call calloc" -- todo fix calling convention
     ]
 
 -- dummyAsm :: String
