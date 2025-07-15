@@ -32,7 +32,7 @@ data TranslateState = TranslateState
   }
 
 translate :: AST -> IR
-translate = undefined
+translate = mapMaybe genFunct
 
 -- translate = map genFunct
 
@@ -80,9 +80,9 @@ popLoopContinue () = modify $ \s -> s {loopContinues = tail $ loopContinues s}
 
 -- -----------------------------------------------------------
 
-genFunct :: Function -> BBFunc NameOrReg ()
-genFunct (Func _ name args block _) =
-  reduceEmptyBlocks $
+genFunct :: Definition -> Maybe (BBFunc NameOrReg ())
+genFunct (Function (Func _ name args block _)) =
+  Just . reduceEmptyBlocks $
     BBFunc
       { funcName = name,
         funcArgs = map (Left . snd) args :: [NameOrReg],
@@ -108,6 +108,7 @@ genFunct (Func _ name args block _) =
             currentFunc = name,
             labelOrder = []
           }
+genFunct (Struct _) = Nothing
 
 reduceEmptyBlocks :: BBFunc a b -> BBFunc a b
 reduceEmptyBlocks a@(BBFunc _ _ bs order) = a {funcBlocks = newBlocks, blockOrder = order'}
