@@ -26,10 +26,10 @@ compile job = do
   liftIO $ putStrLn "compiling..."
   ast <- parseAST $ src job
   liftIO $ putStrLn "parsed"
-  semanticAnalysis ast
+  structDefs <- semanticAnalysis ast
   liftIO $ putStrLn "semanticed"
   -- liftIO . print $ ast
-  let ir = translate ast
+  ir <- translate structDefs ast
   liftIO . putStrLn . unlines . map (showIRFunc . addLiveness) $ ir
   let asm = genAsm (fmap allocateRegisters ir)
   liftIO . putStrLn . enumLines $ asm

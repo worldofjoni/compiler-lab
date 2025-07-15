@@ -1,7 +1,7 @@
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 
 {-# HLINT ignore "Use <&>" #-}
-module Compile.Semantic.TypeCheck (varStatusAnalysis) where
+module Compile.Semantic.TypeCheck (varStatusAnalysis, StructDefs) where
 
 import Compile.AST
 import Compile.Parser (parseNumber)
@@ -89,12 +89,13 @@ recursiveStructNotContains defs struct = mapM_ recSNC (getStructMembers struct)
     isStruct _ = Nothing
     getStructMembers = mapMaybe isStruct . Map.elems . (defs Map.!)
 
-varStatusAnalysis :: AST -> L1ExceptT ()
+varStatusAnalysis :: AST -> L1ExceptT StructDefs
 varStatusAnalysis ast = do
   structDefs <- checkStructDefs Map.empty ast
   mapM_ (recursiveStructNotContains structDefs) (Map.keys structDefs)
   signatures <- functionSignatures fs
   mapM_ (checkFunction signatures structDefs) fs
+  pure structDefs
   where
     fs = filterFunctions ast
 

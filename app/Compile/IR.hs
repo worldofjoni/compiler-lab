@@ -46,6 +46,7 @@ type IRBasicBlock = BasicBlock (IStmt NameOrReg) ()
 
 data Operand a = Reg a | Imm Integer
 
+type Address a = (a, Integer, Maybe a, Integer) -- base + scale * index + displacement
 data IStmt a
   = Return (Operand a)
   | a :<- (Operand a)
@@ -56,6 +57,9 @@ data IStmt a
   | Goto Label
   | GotoIfNot Label (Operand a)
   | CallIr (Maybe a) Label [a]
+  | a :<-$ (Address a) -- memload
+  | (Address a) :$<- a -- memstore
+  | AssertBounds a a -- assert bounds of a0, to be between 0 (incl) and a1 (excl)
   | Nop
 
 instance (Show a) => Show (Operand a) where

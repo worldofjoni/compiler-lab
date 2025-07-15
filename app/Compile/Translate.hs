@@ -10,12 +10,15 @@ where
 
 import Compile.AST
 import Compile.IR
+import Compile.Semantic.TypeCheck (StructDefs)
 import Control.Monad.State
 import Data.Foldable (traverse_)
+import Data.List (sortOn)
 import qualified Data.Map as Map
-import Data.Maybe (listToMaybe, mapMaybe)
+import Data.Maybe (catMaybes, listToMaybe, mapMaybe)
+import Error (L1ExceptT)
 
-type Translate a = State TranslateState a
+type Translate = StateT TranslateState L1ExceptT
 
 data TranslateState = TranslateState
   { nextReg :: VRegister,
@@ -26,20 +29,19 @@ data TranslateState = TranslateState
     code :: Map.Map Label IRBasicBlock,
     currentLines :: [IStmt NameOrReg],
     currentLabel :: Label,
-    currentFunc :: String
+    currentFunc :: String,
+    structDefs :: StructDefs
   }
 
-translate :: AST -> IR
-translate = mapMaybe genFunct
+translate :: StructDefs -> AST -> L1ExceptT IR
+translate defs ast = catMaybes <$> mapM (genFunct defs) ast
 
--- translate = map genFunct
-
-freshReg :: Translate VRegister
+freshReg :: Translate (Either a VRegister)
 freshReg = do
   curr <- get
   let r = nextReg curr
   put curr {nextReg = r + 1}
-  return r
+  return (Right r)
 
 freshLabelWithPrefix :: String -> Translate Label
 freshLabelWithPrefix prefix = do
@@ -78,9 +80,27 @@ popLoopContinue () = modify $ \s -> s {loopContinues = tail $ loopContinues s}
 
 -- -----------------------------------------------------------
 
-genFunct :: Definition -> Maybe (BBFunc NameOrReg ())
-genFunct (Function (Func _ name args block _)) =
-  Just . reduceEmptyBlocks $
+genFunct :: StructDefs -> Definition -> L1ExceptT (Maybe (BBFunc NameOrReg ()))
+genFunct defs (Function (Func _ name args block _)) = do
+  endState <-
+    execStateT
+      ( do
+          genBlock block
+          commitAndNew [] ""
+      )
+      TranslateState
+        { nextReg = 0,
+          nextLabelNo = 0,
+          loopEnds = [],
+          loopContinues = [],
+          code = Map.empty,
+          currentLines = [],
+          currentLabel = name,
+          currentFunc = name,
+          labelOrder = [],
+          structDefs = defs
+        }
+  pure . Just . reduceEmptyBlocks $
     BBFunc
       { funcName = name,
         funcArgs = map (Left . snd) args :: [NameOrReg],
@@ -88,25 +108,7 @@ genFunct (Function (Func _ name args block _)) =
           fmap (fmapSameExtra (\s -> (s, ()))) . code $ endState,
         blockOrder = labelOrder endState
       }
-  where
-    endState =
-      execState
-        ( do
-            genBlock block
-            commitAndNew [] ""
-        )
-        TranslateState
-          { nextReg = 0,
-            nextLabelNo = 0,
-            loopEnds = [],
-            loopContinues = [],
-            code = Map.empty,
-            currentLines = [],
-            currentLabel = name,
-            currentFunc = name,
-            labelOrder = []
-          }
-genFunct (Struct _) = Nothing
+genFunct _ (Struct _) = pure Nothing
 
 reduceEmptyBlocks :: BBFunc a b -> BBFunc a b
 reduceEmptyBlocks a@(BBFunc _ _ bs0 order) = a {funcBlocks = newBlocks, blockOrder = order'}
@@ -142,6 +144,18 @@ genStmt (SimpStmt (Asgn (Var name _) Nothing e _)) = do
 genStmt (SimpStmt (Asgn (Var name _) (Just op) e _)) = do
   x <- toOperand e
   emit $ Left name :<-+ (Reg (Left name), op, x)
+genStmt (SimpStmt (Asgn lv Nothing e _)) = do
+  tmp <- freshReg
+  assignTo tmp e
+  addr <- getAddress (lvalueToExpr lv)
+  emit $ addr :$<- tmp
+genStmt (SimpStmt (Asgn lv (Just op) e _)) = do
+  ereg <- toOperand e
+  addr <- getAddress $ lvalueToExpr lv
+  tmp <- freshReg
+  emit $ tmp :<-$ addr
+  emit $ tmp :<-+ (Reg tmp, op, ereg)
+  emit $ addr :$<- tmp
 genStmt (Ret e _) = do
   x <- toOperand e
   emit $ Return x
@@ -219,8 +233,8 @@ evalArgs =
   mapM
     ( \e -> do
         reg <- freshReg
-        assignTo (Right reg) e
-        pure (Right reg)
+        assignTo reg e
+        pure reg
     )
 
 maybeGenStmt :: Maybe Stmt -> Translate ()
@@ -239,8 +253,8 @@ toOperand (VarExpr name _) = do
   return . Reg . Left $ name
 toOperand e = do
   t <- freshReg
-  assignTo (Right t) e
-  return . Reg . Right $ t
+  assignTo t e
+  return . Reg $ t
 
 boolToInt :: Bool -> Integer
 boolToInt True = 1
@@ -301,3 +315,56 @@ assignTo d (Ternary condition thenExpr elseExpr) = do
 assignTo d (Call name args _) = do
   regs <- evalArgs args
   emit $ CallIr (Just d) name regs
+assignTo d (Null _) = emit $ d :<- Imm 0
+assignTo d (Alloc ty) = do
+  t <- freshReg
+  tysize <- sizeof ty
+  emit $ t :<- Imm tysize
+  emit $ CallIr (Just d) "alloc" [t]
+assignTo d (AllocArray ty e) = do
+  nElem <- toOperand e
+  size <- freshReg
+  tysize <- sizeof ty
+  emit $ size :<-+ (Imm tysize, Mul, nElem)
+  emit $ size :<-+ (Reg size, Add, Imm 8) -- extra for array size, aligned to 8 bytes
+  emit $ CallIr (Just d) "alloc" [size]
+assignTo d l = do
+  -- DerefE, ArrayE, FieldE
+  addr <- getAddress l
+  emit $ d :<-$ addr
+
+getAddress :: Expr -> Translate (Address NameOrReg)
+getAddress (DerefE lv) = do
+  r <- freshReg
+  assignTo r lv
+  pure (r, 0, Nothing, 0)
+getAddress (ArrayAccessE lv idx) = do
+  a <- freshReg
+  assignTo a lv
+  i <- freshReg
+  assignTo i idx
+  tysize <- sizeof undefined -- todo
+  pure (a, tysize, Just i, 8)
+getAddress (FieldE st fname) = do
+  a <- freshReg
+  assignTo a st
+  offset <- structFieldOffset undefined fname -- todo
+  pure (a, 0, Nothing, offset)
+getAddress _ = error "var has no address, should never be called"
+
+sizeof :: Type -> Translate Integer
+sizeof IntType = pure 4
+sizeof BoolType = pure 4
+sizeof (PointerType _) = pure 8
+sizeof AnyPointer = pure 8
+sizeof (ArrayType _) = pure 8
+sizeof (StructType name) = do
+  struct <- gets ((Map.! name) . structDefs)
+  let types = map snd . sortOn fst . Map.assocs $ struct
+  sum . map (max 8) <$> mapM sizeof types -- allign all fields to 8 bytes
+
+structFieldOffset :: Ident -> Ident -> Translate Integer
+structFieldOffset sname fname = do
+  struct <- gets ((Map.! sname) . structDefs)
+  let types = map snd . takeWhile ((/= fname) . fst) . sortOn fst . Map.assocs $ struct
+  sum . map (max 8) <$> mapM sizeof types
