@@ -148,14 +148,14 @@ genStmt (SimpStmt (Asgn lv Nothing e _)) = do
   tmp <- freshReg
   assignTo tmp e
   addr <- getAddress (lvalueToExpr lv)
-  emit $ addr :$<- tmp
+  emit $ addr :$<- Reg tmp
 genStmt (SimpStmt (Asgn lv (Just op) e _)) = do
   ereg <- toOperand e
   addr <- getAddress $ lvalueToExpr lv
   tmp <- freshReg
   emit $ tmp :<-$ addr
   emit $ tmp :<-+ (Reg tmp, op, ereg)
-  emit $ addr :$<- tmp
+  emit $ addr :$<- Reg tmp
 genStmt (Ret e _) = do
   x <- toOperand e
   emit $ Return x
@@ -328,6 +328,7 @@ assignTo d (AllocArray ty e) = do
   emit $ size :<-+ (Imm tysize, Mul, nElem)
   emit $ size :<-+ (Reg size, Add, Imm 8) -- extra for array size, aligned to 8 bytes
   emit $ CallIr (Just d) "alloc" [size]
+  emit $ (d, 0, Nothing, 0) :$<- nElem
 assignTo d l = do
   -- DerefE, ArrayE, FieldE
   addr <- getAddress l
@@ -343,6 +344,9 @@ getAddress (ArrayAccessE lv idx) = do
   assignTo a lv
   i <- freshReg
   assignTo i idx
+  fill <- freshReg
+  emit $ fill :<-$ (a, 0, Nothing, 0)
+  emit $ AssertBounds i fill
   tysize <- sizeof undefined -- todo
   pure (a, tysize, Just i, 8)
 getAddress (FieldE st fname) = do
